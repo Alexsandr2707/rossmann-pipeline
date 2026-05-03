@@ -49,6 +49,39 @@ class Pipeline:
             "Summary report generation will be implemented after metrics storage."
         )
 
+    def reset(self) -> dict[str, int]:
+        self.logger.info("Reset mode requested")
+        cleanup_targets = {
+            "raw_batches": list(self.config.paths.raw_data_dir.glob("batch_*.csv")),
+            "processed_batches": list(
+                self.config.paths.processed_data_dir.glob("batch_*_processed.csv")
+            ),
+            "eda_reports": list(self.config.paths.reports_dir.glob("eda_batch_*.md")),
+            "predictions": list(self.config.paths.predictions_dir.glob("*.csv")),
+            "models": list(self.config.paths.models_dir.glob("*.pkl")),
+            "history_files": [
+                self.config.paths.collector_state_path,
+                self.config.paths.batch_metadata_path,
+                self.config.paths.data_quality_history_path,
+            ],
+        }
+
+        removed: dict[str, int] = {}
+        for group, paths in cleanup_targets.items():
+            removed[group] = self._remove_files(paths)
+
+        self.logger.info("Reset completed: %s", removed)
+        return removed
+
+    def _remove_files(self, paths: list[Path]) -> int:
+        removed = 0
+        for path in paths:
+            if not path.exists() or not path.is_file():
+                continue
+            path.unlink()
+            removed += 1
+        return removed
+
     def _ensure_directories(self) -> None:
         for directory in (
             self.config.paths.external_data_dir,
