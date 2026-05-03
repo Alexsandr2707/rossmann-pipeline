@@ -1,0 +1,38 @@
+project:
+  name: mlops_streaming_mvp
+  random_seed: 42
+
+data:
+  source_path: data/external/ethiopian_insurance.csv
+  time_column: TransactionMonth
+  target_column: has_claim
+  target_source_column: TotalClaims
+  batch_size: 1000
+  min_rows: 10000
+  min_features: 10
+  min_categorical_features: 2
+
+paths:
+  external_data_dir: data/external
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
+  artifacts_dir: artifacts
+  models_dir: models
+  logs_dir: logs
+  reports_dir: reports
+  predictions_dir: artifacts/predictions
+  collector_state_path: artifacts/collector_state.json
+  pipeline_log_path: logs/pipeline.log
+
+quality:
+  max_missing_share: 0.5
+  max_duplicate_share: 0.1
+  
+model:
+  primary_metric: f1
+  incremental_model: sgd_logistic
+  candidate_models:
+    - sgd_logistic
+    - decision_tree
+    - knn
+
