@@ -13,14 +13,21 @@ class ProjectConfig:
 
 @dataclass(frozen=True)
 class DataConfig:
-    source_path: Path
+    source_paths: tuple[Path, ...]
     time_column: str
     target_column: str
-    target_source_column: str
     batch_size: int
     min_rows: int
     min_features: int
     min_categorical_features: int
+
+
+@dataclass(frozen=True)
+class TargetPreprocessingConfig:
+    missing_strategy: str
+    missing_fill_value: float
+    add_missing_indicator: bool
+    missing_indicator_suffix: str
 
 
 @dataclass(frozen=True)
@@ -34,12 +41,13 @@ class PathConfig:
     reports_dir: Path
     predictions_dir: Path
     collector_state_path: Path
+    batch_metadata_path: Path
     pipeline_log_path: Path
 
 
 @dataclass(frozen=True)
 class QualityConfig:
-    max_missing_share: float
+    max_missing_part: float
     max_duplicate_share: float
 
 
@@ -54,6 +62,7 @@ class ModelConfig:
 class Config:
     project: ProjectConfig
     data: DataConfig
+    target_preprocessing: TargetPreprocessingConfig
     paths: PathConfig
     quality: QualityConfig
     model: ModelConfig
@@ -80,6 +89,7 @@ def load_config(path: str | Path) -> Config:
 
     project = _require_section(raw, "project")
     data = _require_section(raw, "data")
+    target_preprocessing = _require_section(raw, "target_preprocessing")
     paths = _require_section(raw, "paths")
     quality = _require_section(raw, "quality")
     model = _require_section(raw, "model")
@@ -90,14 +100,19 @@ def load_config(path: str | Path) -> Config:
             random_seed=int(project["random_seed"]),
         ),
         data=DataConfig(
-            source_path=_path(data["source_path"]),
+            source_paths=tuple(_path(item) for item in data["source_paths"]),
             time_column=str(data["time_column"]),
             target_column=str(data["target_column"]),
-            target_source_column=str(data["target_source_column"]),
             batch_size=int(data["batch_size"]),
             min_rows=int(data["min_rows"]),
             min_features=int(data["min_features"]),
             min_categorical_features=int(data["min_categorical_features"]),
+        ),
+        target_preprocessing=TargetPreprocessingConfig(
+            missing_strategy=str(target_preprocessing["missing_strategy"]),
+            missing_fill_value=float(target_preprocessing["missing_fill_value"]),
+            add_missing_indicator=bool(target_preprocessing["add_missing_indicator"]),
+            missing_indicator_suffix=str(target_preprocessing["missing_indicator_suffix"]),
         ),
         paths=PathConfig(
             external_data_dir=_path(paths["external_data_dir"]),
@@ -109,10 +124,11 @@ def load_config(path: str | Path) -> Config:
             reports_dir=_path(paths["reports_dir"]),
             predictions_dir=_path(paths["predictions_dir"]),
             collector_state_path=_path(paths["collector_state_path"]),
+            batch_metadata_path=_path(paths["batch_metadata_path"]),
             pipeline_log_path=_path(paths["pipeline_log_path"]),
         ),
         quality=QualityConfig(
-            max_missing_share=float(quality["max_missing_share"]),
+            max_missing_part=float(quality["max_missing_part"]),
             max_duplicate_share=float(quality["max_duplicate_share"]),
         ),
         model=ModelConfig(

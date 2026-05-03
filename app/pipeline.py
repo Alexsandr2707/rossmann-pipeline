@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from app.config import Config
+from app.data_collection import DataCollector
 
 
 class Pipeline:
@@ -11,10 +12,21 @@ class Pipeline:
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
         self._ensure_directories()
+        self.collector = DataCollector(config)
 
     def update(self) -> bool:
         self.logger.info("Update mode requested")
-        raise NotImplementedError("Update pipeline will be implemented later.")
+        validation = self.collector.validate_source_dataset()
+        self.logger.info("Source dataset validation: %s", validation)
+
+        collected = self.collector.collect_next_batch()
+        if collected is None:
+            return False
+
+        batch_path, metadata = collected
+        self.logger.info("Batch metadata: %s", metadata)
+        self.logger.info("Batch saved to %s", batch_path)
+        return True
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)

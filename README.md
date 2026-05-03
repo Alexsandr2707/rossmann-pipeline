@@ -18,7 +18,7 @@ python run.py -mode inference -file ./path_to_file.csv
 python run.py -mode summary
 ```
 
-На первом этапе реализована базовая структура проекта и маршрутизация CLI. Следующие этапы будут добавлять сбор батчей, quality checks, обучение, inference и summary.
+Текущая реализация поддерживает первый шаг pipeline: проверку исходного датасета, эмуляцию потока через батчи, сохранение raw batch-файлов, состояния сборщика и метаданных батчей.
 
 ## Project Layout
 
@@ -28,3 +28,20 @@ python run.py -mode summary
 - `data/` - исходные, потоковые и обработанные данные.
 - `artifacts/`, `models/`, `logs/`, `reports/` - артефакты, пригодные для сохранения в GitHub Actions.
 
+## Data
+
+Ожидаемые исходные файлы Ethiopian Insurance:
+
+- `data/external/motor_data11-14lats.csv`
+- `data/external/motor_data14-2018.csv`
+
+Временная колонка: `INSR_BEGIN`. Целевая переменная: вещественная `CLAIM_PAID`.
+
+Пропуски в целевой переменной обрабатываются по политике из `config/config.yaml`.
+По умолчанию используется `fill_zero`: пропущенные значения `CLAIM_PAID` заменяются на `0.0`, а рядом добавляется индикатор `CLAIM_PAID_WAS_MISSING`.
+
+Команда `python run.py -mode update` берет следующий батч по времени и обновляет:
+
+- `data/raw/batch_XXXX.csv`
+- `artifacts/collector_state.json`
+- `artifacts/batch_metadata_history.csv`

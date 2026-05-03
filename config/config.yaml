@@ -3,14 +3,21 @@ project:
   random_seed: 42
 
 data:
-  source_path: data/external/ethiopian_insurance.csv
-  time_column: TransactionMonth
-  target_column: has_claim
-  target_source_column: TotalClaims
-  batch_size: 1000
+  source_paths:
+    - data/external/motor_data11-14lats.csv
+    - data/external/motor_data14-2018.csv
+  time_column: INSR_BEGIN
+  target_column: CLAIM_PAID
+  batch_size: 5000
   min_rows: 10000
   min_features: 10
   min_categorical_features: 2
+
+target_preprocessing:
+  missing_strategy: fill_zero
+  missing_fill_value: 0.0
+  add_missing_indicator: true
+  missing_indicator_suffix: _WAS_MISSING
 
 paths:
   external_data_dir: data/external
@@ -22,17 +29,21 @@ paths:
   reports_dir: reports
   predictions_dir: artifacts/predictions
   collector_state_path: artifacts/collector_state.json
+  batch_metadata_path: artifacts/batch_metadata_history.csv
   pipeline_log_path: logs/pipeline.log
 
 quality:
-  max_missing_share: 0.5
+  max_missing_part: 0.5
   max_duplicate_share: 0.1
   
 model:
-  primary_metric: f1
-  incremental_model: sgd_logistic
+  primary_metric: rmse
+  incremental_model: sgd_regressor
   candidate_models:
-    - sgd_logistic
-    - decision_tree
-    - knn
-
+    - linear_regression
+    - ridge_regression
+    - lasso_regression
+    - knn_regression
+    - decision_tree_regression
+    - random_forest_regression
+    - sgd_regression
