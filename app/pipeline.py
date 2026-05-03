@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.config import Config
 from app.data_collection import DataCollector
+from app.data_quality import DataQualityAnalyzer
 
 
 class Pipeline:
@@ -13,6 +14,7 @@ class Pipeline:
         self.logger = logging.getLogger(self.__class__.__name__)
         self._ensure_directories()
         self.collector = DataCollector(config)
+        self.quality_analyzer = DataQualityAnalyzer(config)
 
     def update(self) -> bool:
         self.logger.info("Update mode requested")
@@ -26,6 +28,13 @@ class Pipeline:
         batch_path, metadata = collected
         self.logger.info("Batch metadata: %s", metadata)
         self.logger.info("Batch saved to %s", batch_path)
+
+        processed_path, quality_metrics, report_path = (
+            self.quality_analyzer.analyze_and_clean_batch(batch_path, metadata)
+        )
+        self.logger.info("Data quality history updated for %s", processed_path)
+        self.logger.info("EDA report saved to %s", report_path)
+        self.logger.info("Quality passed: %s", quality_metrics["quality_passed"])
         return True
 
     def inference(self, input_path: Path) -> Path:

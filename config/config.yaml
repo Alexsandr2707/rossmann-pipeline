@@ -19,6 +19,29 @@ target_preprocessing:
   add_missing_indicator: true
   missing_indicator_suffix: _WAS_MISSING
 
+data_schema:
+  numeric_columns:
+    - INSURED_VALUE
+    - PREMIUM
+    - PROD_YEAR
+    - SEATS_NUM
+    - CARRYING_CAPACITY
+    - CCM_TON
+  categorical_columns:
+    - SEX
+    - EFFECTIVE_YR
+    - INSR_TYPE
+    - TYPE_VEHICLE
+    - MAKE
+    - USAGE
+  datetime_columns:
+    - INSR_BEGIN
+    - INSR_END
+  id_columns:
+    - OBJECT_ID
+  service_columns:
+    - _source_file
+
 paths:
   external_data_dir: data/external
   raw_data_dir: data/raw
@@ -30,11 +53,12 @@ paths:
   predictions_dir: artifacts/predictions
   collector_state_path: artifacts/collector_state.json
   batch_metadata_path: artifacts/batch_metadata_history.csv
+  data_quality_history_path: artifacts/data_quality_history.csv
   pipeline_log_path: logs/pipeline.log
 
 quality:
   max_missing_part: 0.5
-  max_duplicate_share: 0.1
+  max_duplicate_part: 0.1
   
 model:
   primary_metric: rmse

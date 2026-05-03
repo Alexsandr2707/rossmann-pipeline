@@ -20,6 +20,7 @@ class DataPreprocessor:
         transformed = dataset.copy()
         transformed = self._transform_time_column(transformed)
         transformed = self._transform_target_column(transformed)
+        transformed = self._apply_schema_types(transformed)
         transformed = transformed.sort_values(
             [self.config.data.time_column, "_source_file"]
         ).reset_index(drop=True)
@@ -61,5 +62,29 @@ class DataPreprocessor:
             dataset[target_column] = target
         else:
             raise ValueError(f"Unsupported target missing strategy: {strategy}")
+
+        return dataset
+
+    def _apply_schema_types(self, dataset: pd.DataFrame) -> pd.DataFrame:
+        for column in self.config.data_schema.numeric_columns:
+            if column in dataset.columns:
+                dataset[column] = pd.to_numeric(dataset[column], errors="coerce")
+
+        string_columns = (
+            *self.config.data_schema.categorical_columns,
+            *self.config.data_schema.id_columns,
+            *self.config.data_schema.service_columns,
+        )
+        for column in string_columns:
+            if column in dataset.columns:
+                dataset[column] = dataset[column].astype("string")
+
+        for column in self.config.data_schema.datetime_columns:
+            if column in dataset.columns and column != self.config.data.time_column:
+                dataset[column] = pd.to_datetime(
+                    dataset[column],
+                    format="%d-%b-%y",
+                    errors="coerce",
+                )
 
         return dataset

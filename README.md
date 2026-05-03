@@ -18,7 +18,7 @@ python run.py -mode inference -file ./path_to_file.csv
 python run.py -mode summary
 ```
 
-Текущая реализация поддерживает первый шаг pipeline: проверку исходного датасета, эмуляцию потока через батчи, сохранение raw batch-файлов, состояния сборщика и метаданных батчей.
+Текущая реализация поддерживает первые шаги pipeline: проверку исходного датасета, эмуляцию потока через батчи, сохранение raw batch-файлов, состояния сборщика, метаданных батчей, processed batch-файлов и отчетов качества данных.
 
 ## Project Layout
 
@@ -43,5 +43,18 @@ python run.py -mode summary
 Команда `python run.py -mode update` берет следующий батч по времени и обновляет:
 
 - `data/raw/batch_XXXX.csv`
+- `data/processed/batch_XXXX_processed.csv`
 - `artifacts/collector_state.json`
 - `artifacts/batch_metadata_history.csv`
+- `artifacts/data_quality_history.csv`
+- `reports/eda_batch_XXXX.md`
+
+Data quality/EDA считает generic summary только по analysis-признакам.
+Из него исключаются служебные, временные, ID и target-колонки:
+`INSR_BEGIN`, `INSR_END`, `OBJECT_ID`, `CLAIM_PAID`, `_source_file`, `CLAIM_PAID_WAS_MISSING`.
+
+Фиксированная схема типов задается в секции `data_schema` файла `config/config.yaml`.
+Она используется при подготовке данных и при расчете quality-отчетов, чтобы типы колонок не менялись от батча к батчу.
+
+`duplicate_part` - доля полностью повторяющихся строк в батче: `duplicate_rows / rows_before`.
+Параметр `max_duplicate_part` - это допустимый верхний порог этой доли; приставка `max_` означает, что batch проходит quality-check только если фактический `duplicate_part` не превышает заданный максимум.

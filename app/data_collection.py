@@ -53,7 +53,10 @@ class DataCollector:
 
     def validate_source_dataset(self) -> dict[str, Any]:
         dataset = self._load_dataset()
-        categorical_count = int(dataset.select_dtypes(include=["object", "category"]).shape[1])
+        categorical_count = self._count_existing_columns(
+            dataset,
+            self.config.data_schema.categorical_columns,
+        )
         return {
             "rows": int(len(dataset)),
             "features": int(dataset.shape[1]),
@@ -124,8 +127,14 @@ class DataCollector:
             "time_min": str(batch[time_column].min()),
             "time_max": str(batch[time_column].max()),
             "missing_part": float(batch.isna().mean().mean()),
-            "numeric_features": int(batch.select_dtypes(include=["number"]).shape[1]),
-            "categorical_features": int(batch.select_dtypes(include=["object", "category"]).shape[1]),
+            "numeric_features": self._count_existing_columns(
+                batch,
+                self.config.data_schema.numeric_columns,
+            ),
+            "categorical_features": self._count_existing_columns(
+                batch,
+                self.config.data_schema.categorical_columns,
+            ),
             "target_missing": int(target.isna().sum()),
             "target_mean": float(target.mean()) if target.notna().any() else None,
             "target_min": float(target.min()) if target.notna().any() else None,
@@ -135,6 +144,13 @@ class DataCollector:
             if self.config.target_preprocessing.add_missing_indicator
             else "",
         }
+
+    def _count_existing_columns(
+        self,
+        dataset: pd.DataFrame,
+        columns: tuple[str, ...],
+    ) -> int:
+        return sum(1 for column in columns if column in dataset.columns)
 
     def _append_metadata(self, metadata: dict[str, Any]) -> None:
         metadata_path = self.config.paths.batch_metadata_path
