@@ -16,6 +16,7 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline as SklearnPipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
+from scipy.stats import pearsonr
 
 from app.config import Config
 
@@ -223,6 +224,10 @@ class ModelTrainer:
         mae = mean_absolute_error(y_true, predictions)
         r2 = r2_score(y_true, predictions)
         y_true_array = y_true.to_numpy()
+        pearson_corr, pearson_p_value = self._pearson_metrics(
+            y_true_array,
+            predictions,
+        )
         denominator = np.abs(y_true_array) + np.abs(predictions)
         smape_values = np.divide(
             2.0 * np.abs(predictions - y_true_array),
@@ -236,7 +241,22 @@ class ModelTrainer:
             "mae": float(mae),
             "r2": float(r2),
             "smape": float(smape),
+            "pearson_corr": pearson_corr,
+            "pearson_p_value": pearson_p_value,
         }
+
+    def _pearson_metrics(
+        self,
+        y_true: np.ndarray,
+        predictions: np.ndarray,
+    ) -> tuple[float | None, float | None]:
+        if len(y_true) < 2:
+            return None, None
+        if np.isclose(np.std(y_true), 0.0) or np.isclose(np.std(predictions), 0.0):
+            return None, None
+
+        result = pearsonr(y_true, predictions)
+        return float(result.statistic), float(result.pvalue)
 
     def _save_model_version(
         self,
@@ -284,9 +304,31 @@ class ModelTrainer:
         rows["is_best_in_update"] = rows[self.config.model.primary_metric] == rows[
             self.config.model.primary_metric
         ].min()
+        rows = rows[self._metrics_columns(rows)]
         rows.to_csv(
             self.metrics_history_path,
             mode="a",
             header=not self.metrics_history_path.exists(),
             index=False,
         )
+
+    def _metrics_columns(self, rows: pd.DataFrame) -> list[str]:
+        preferred_columns = [
+            "model_name",
+            "batch_index",
+            "rmse",
+            "mae",
+            "r2",
+            "smape",
+            "pearson_corr",
+            "pearson_p_value",
+            "train_rows",
+            "valid_rows",
+            "is_best_in_update",
+            "latest_processed_path",
+            "model_path",
+        ]
+        return [
+            *[column for column in preferred_columns if column in rows.columns],
+            *[column for column in rows.columns if column not in preferred_columns],
+        ]
