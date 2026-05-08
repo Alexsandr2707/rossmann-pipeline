@@ -6,6 +6,7 @@ from pathlib import Path
 from app.config import Config
 from app.data_collection import DataCollector
 from app.data_quality import DataQualityAnalyzer
+from app.model_training import ModelTrainer
 
 
 class Pipeline:
@@ -15,6 +16,7 @@ class Pipeline:
         self._ensure_directories()
         self.collector = DataCollector(config)
         self.quality_analyzer = DataQualityAnalyzer(config)
+        self.model_trainer = ModelTrainer(config)
 
     def update(self) -> bool:
         self.logger.info("Update mode requested")
@@ -35,6 +37,13 @@ class Pipeline:
         self.logger.info("Data quality history updated for %s", processed_path)
         self.logger.info("EDA report saved to %s", report_path)
         self.logger.info("Quality passed: %s", quality_metrics["quality_passed"])
+
+        model_path, model_metrics = self.model_trainer.train_on_processed_data(
+            latest_processed_path=processed_path,
+            batch_metadata=metadata,
+        )
+        self.logger.info("Model saved to %s", model_path)
+        self.logger.info("Best model metrics: %s", model_metrics)
         return True
 
     def inference(self, input_path: Path) -> Path:
@@ -63,6 +72,7 @@ class Pipeline:
                 self.config.paths.collector_state_path,
                 self.config.paths.batch_metadata_path,
                 self.config.paths.data_quality_history_path,
+                self.config.paths.model_metrics_history_path,
             ],
         }
 

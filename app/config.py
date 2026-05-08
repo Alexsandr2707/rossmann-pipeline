@@ -52,6 +52,8 @@ class PathConfig:
     collector_state_path: Path
     batch_metadata_path: Path
     data_quality_history_path: Path
+    model_metrics_history_path: Path
+    best_model_path: Path
     pipeline_log_path: Path
 
 
@@ -66,6 +68,7 @@ class ModelConfig:
     primary_metric: str
     incremental_model: str
     candidate_models: tuple[str, ...]
+    model_parameters: dict[str, dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -149,6 +152,8 @@ def load_config(path: str | Path) -> Config:
             collector_state_path=_path(paths["collector_state_path"]),
             batch_metadata_path=_path(paths["batch_metadata_path"]),
             data_quality_history_path=_path(paths["data_quality_history_path"]),
+            model_metrics_history_path=_path(paths["model_metrics_history_path"]),
+            best_model_path=_path(paths["best_model_path"]),
             pipeline_log_path=_path(paths["pipeline_log_path"]),
         ),
         quality=QualityConfig(
@@ -159,8 +164,31 @@ def load_config(path: str | Path) -> Config:
             primary_metric=str(model["primary_metric"]),
             incremental_model=str(model["incremental_model"]),
             candidate_models=tuple(model["candidate_models"]),
+            model_parameters=_model_parameters(raw.get("model_parameters", {})),
         ),
     )
+
+
+def _model_parameters(raw: Any) -> dict[str, dict[str, Any]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("Config section model_parameters must be a mapping.")
+
+    parameters: dict[str, dict[str, Any]] = {}
+    for model_name, model_params in raw.items():
+        if model_params is None:
+            parameters[str(model_name)] = {}
+            continue
+        if not isinstance(model_params, dict):
+            raise ValueError(
+                f"Model parameters for {model_name} must be a mapping."
+            )
+        parameters[str(model_name)] = {
+            str(parameter_name): parameter_value
+            for parameter_name, parameter_value in model_params.items()
+        }
+    return parameters
 
 
 def _load_yaml(content: str) -> dict[str, Any]:
@@ -179,18 +207,22 @@ def _load_simple_yaml(content: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     current_section: str | None = None
     current_list_key: str | None = None
+    current_nested_key: str | None = None
 
     for raw_line in content.splitlines():
         line = raw_line.split("#", 1)[0].rstrip()
         if not line:
             continue
 
-        if not raw_line.startswith(" "):
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+
+        if indent == 0:
             if not line.endswith(":"):
                 raise ValueError(f"Invalid top-level YAML line: {raw_line}")
             current_section = line[:-1]
             result[current_section] = {}
             current_list_key = None
+            current_nested_key = None
             continue
 
         if current_section is None:
@@ -209,17 +241,29 @@ def _load_simple_yaml(content: str) -> dict[str, Any]:
         if not separator:
             raise ValueError(f"Invalid YAML key-value line: {raw_line}")
 
+        if indent == 4:
+            if current_nested_key is None:
+                raise ValueError(f"Nested YAML key without parent: {raw_line}")
+            if not isinstance(section[current_nested_key], dict):
+                section[current_nested_key] = {}
+            section[current_nested_key][key] = _parse_scalar(value.strip())
+            continue
+
         if value.strip() == "":
             section[key] = []
             current_list_key = key
+            current_nested_key = key
         else:
             section[key] = _parse_scalar(value.strip())
             current_list_key = None
+            current_nested_key = None
 
     return result
 
 
-def _parse_scalar(value: str) -> str | int | float | bool:
+def _parse_scalar(value: str) -> str | int | float | bool | None:
+    if value in {"null", "None", "~"}:
+        return None
     if value in {"true", "false"}:
         return value == "true"
     try:

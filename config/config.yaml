@@ -54,6 +54,8 @@ paths:
   collector_state_path: artifacts/collector_state.json
   batch_metadata_path: artifacts/batch_metadata_history.csv
   data_quality_history_path: artifacts/data_quality_history.csv
+  model_metrics_history_path: artifacts/model_metrics_history.csv
+  best_model_path: models/best_model.pkl
   pipeline_log_path: logs/pipeline.log
 
 quality:
@@ -62,12 +64,32 @@ quality:
   
 model:
   primary_metric: rmse
-  incremental_model: sgd_regressor
+  incremental_model: sgd_regression
   candidate_models:
     - linear_regression
-    - ridge_regression
-    - lasso_regression
+    - elastic_net_regression
     - knn_regression
     - decision_tree_regression
     - random_forest_regression
     - sgd_regression
+
+model_parameters:
+  linear_regression:
+    fit_intercept: true
+  elastic_net_regression:
+    alpha: 1.0
+    l1_ratio: 0.5
+    max_iter: 5000
+  knn_regression:
+    n_neighbors: 5
+    weights: uniform
+  decision_tree_regression:
+    min_samples_leaf: 1
+  random_forest_regression:
+    n_estimators: 50
+    min_samples_leaf: 1
+    n_jobs: -1
+  sgd_regression:
+    alpha: 0.0001
+    max_iter: 2000
+    tol: 0.001
