@@ -23,20 +23,11 @@ class Pipeline:
         validation = self.collector.validate_source_dataset()
         self.logger.info("Source dataset validation: %s", validation)
 
-        collected = self.collector.collect_next_batch()
-        if collected is None:
+        collected_batches = self._collect_and_prepare_update_batches()
+        if not collected_batches:
             return False
 
-        batch_path, metadata = collected
-        self.logger.info("Batch metadata: %s", metadata)
-        self.logger.info("Batch saved to %s", batch_path)
-
-        processed_path, quality_metrics, report_path = (
-            self.quality_analyzer.analyze_and_clean_batch(batch_path, metadata)
-        )
-        self.logger.info("Data quality history updated for %s", processed_path)
-        self.logger.info("EDA report saved to %s", report_path)
-        self.logger.info("Quality passed: %s", quality_metrics["quality_passed"])
+        processed_path, metadata = collected_batches[-1]
 
         model_path, model_metrics = self.model_trainer.train_on_processed_data(
             latest_processed_path=processed_path,
@@ -45,6 +36,37 @@ class Pipeline:
         self.logger.info("Model saved to %s", model_path)
         self.logger.info("Best model metrics: %s", model_metrics)
         return True
+
+    def _collect_and_prepare_update_batches(self) -> list[tuple[Path, dict]]:
+        batch_count = self._update_batch_count()
+        prepared_batches: list[tuple[Path, dict]] = []
+
+        for _ in range(batch_count):
+            collected = self.collector.collect_next_batch()
+            if collected is None:
+                break
+
+            batch_path, metadata = collected
+            self.logger.info("Batch metadata: %s", metadata)
+            self.logger.info("Batch saved to %s", batch_path)
+
+            processed_path, quality_metrics, report_path = (
+                self.quality_analyzer.analyze_and_clean_batch(batch_path, metadata)
+            )
+            self.logger.info("Data quality history updated for %s", processed_path)
+            self.logger.info("EDA report saved to %s", report_path)
+            self.logger.info("Quality passed: %s", quality_metrics["quality_passed"])
+            prepared_batches.append((processed_path, metadata))
+
+        return prepared_batches
+
+    def _update_batch_count(self) -> int:
+        if (
+            self.config.model.update_strategy == "incremental"
+            and not self.model_trainer.current_model_path.exists()
+        ):
+            return max(self.config.model.initial_training_batches, 1)
+        return 1
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)

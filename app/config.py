@@ -68,6 +68,11 @@ class ModelConfig:
     primary_metric: str
     incremental_model: str
     candidate_models: tuple[str, ...]
+    training_mode: str
+    selected_model: str
+    update_strategy: str
+    initial_training_batches: int
+    initial_training_max_rows: int
     model_parameters: dict[str, dict[str, Any]]
 
 
@@ -164,6 +169,11 @@ def load_config(path: str | Path) -> Config:
             primary_metric=str(model["primary_metric"]),
             incremental_model=str(model["incremental_model"]),
             candidate_models=tuple(model["candidate_models"]),
+            training_mode=str(model.get("training_mode", "all")),
+            selected_model=str(model.get("selected_model", model["incremental_model"])),
+            update_strategy=str(model.get("update_strategy", "refit")),
+            initial_training_batches=int(model.get("initial_training_batches", 1)),
+            initial_training_max_rows=int(model.get("initial_training_max_rows", 0)),
             model_parameters=_model_parameters(raw.get("model_parameters", {})),
         ),
     )

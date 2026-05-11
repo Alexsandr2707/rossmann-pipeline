@@ -34,7 +34,24 @@ class ModelTrainer:
     def best_model_path(self) -> Path:
         return self.config.paths.best_model_path
 
+    @property
+    def current_model_path(self) -> Path:
+        return self.config.paths.models_dir / "current_model.pkl"
+
     def train_on_processed_data(
+        self,
+        latest_processed_path: Path,
+        batch_metadata: dict[str, Any],
+    ) -> tuple[Path, dict[str, Any]]:
+        if self.config.model.update_strategy == "incremental":
+            return self._incremental_update(latest_processed_path, batch_metadata)
+        if self.config.model.update_strategy == "refit":
+            return self._refit_on_processed_data(latest_processed_path, batch_metadata)
+        raise ValueError(
+            f"Unsupported update strategy: {self.config.model.update_strategy}"
+        )
+
+    def _refit_on_processed_data(
         self,
         latest_processed_path: Path,
         batch_metadata: dict[str, Any],
@@ -45,19 +62,15 @@ class ModelTrainer:
         if len(features) < 10:
             raise ValueError("Not enough rows for model training.")
 
-        train_size = max(int(len(features) * 0.8), 1)
-        if train_size >= len(features):
-            train_size = len(features) - 1
-
-        x_train = features.iloc[:train_size]
-        x_valid = features.iloc[train_size:]
-        y_train = target.iloc[:train_size]
-        y_valid = target.iloc[train_size:]
+        x_train, x_valid, y_train, y_valid = self._time_holdout_split(
+            features,
+            target,
+        )
 
         results: list[dict[str, Any]] = []
         fitted_models: dict[str, SklearnPipeline] = {}
 
-        for model_name in self.config.model.candidate_models:
+        for model_name in self._models_to_train():
             estimator = self._make_estimator(model_name)
             pipeline = SklearnPipeline(
                 steps=[
@@ -75,6 +88,10 @@ class ModelTrainer:
                     "latest_processed_path": str(latest_processed_path),
                     "train_rows": int(len(x_train)),
                     "valid_rows": int(len(x_valid)),
+                    "training_mode": self.config.model.training_mode,
+                    "update_strategy": self.config.model.update_strategy,
+                    "initial_training": False,
+                    "training_rows_total": int(len(features)),
                 }
             )
             results.append(metrics)
@@ -94,6 +111,96 @@ class ModelTrainer:
         self.logger.info("Best model for update: %s", best_metrics)
         return model_path, best_metrics
 
+    def _incremental_update(
+        self,
+        latest_processed_path: Path,
+        batch_metadata: dict[str, Any],
+    ) -> tuple[Path, dict[str, Any]]:
+        model_name = self.config.model.selected_model
+        if model_name != self.config.model.incremental_model:
+            raise ValueError(
+                "Incremental update requires selected_model to match "
+                "incremental_model."
+            )
+        if model_name != "sgd_regression":
+            raise ValueError("Only sgd_regression supports incremental update now.")
+
+        is_initial_training = not self.current_model_path.exists()
+        training_dataset = self._incremental_training_dataset(
+            latest_processed_path,
+            is_initial_training,
+        )
+        features, target = self._build_features_and_target(training_dataset)
+        if len(features) < 10:
+            raise ValueError("Not enough rows for incremental model update.")
+
+        x_train, x_valid, y_train, y_valid = self._time_holdout_split(
+            features,
+            target,
+        )
+
+        if not is_initial_training:
+            payload = joblib.load(self.current_model_path)
+            if payload.get("model_name") != model_name:
+                raise ValueError(
+                    f"Current model is {payload.get('model_name')}, expected {model_name}."
+                )
+            pipeline = payload["pipeline"]
+            preprocessor = pipeline.named_steps["preprocessor"]
+            estimator = pipeline.named_steps["model"]
+            x_train_transformed = preprocessor.transform(x_train)
+            x_valid_transformed = preprocessor.transform(x_valid)
+        else:
+            preprocessor = self._make_feature_preprocessor(features)
+            estimator = self._make_estimator(model_name)
+            x_train_transformed = preprocessor.fit_transform(x_train)
+            x_valid_transformed = preprocessor.transform(x_valid)
+            pipeline = SklearnPipeline(
+                steps=[
+                    ("preprocessor", preprocessor),
+                    ("model", estimator),
+                ]
+            )
+
+        estimator.partial_fit(x_train_transformed, y_train)
+        predictions = estimator.predict(x_valid_transformed)
+        metrics = self._calculate_metrics(y_valid, predictions)
+        metrics.update(
+            {
+                "model_name": model_name,
+                "batch_index": int(batch_metadata.get("batch_index", -1)),
+                "latest_processed_path": str(latest_processed_path),
+                "train_rows": int(len(x_train)),
+                "valid_rows": int(len(x_valid)),
+                "training_mode": self.config.model.training_mode,
+                "update_strategy": self.config.model.update_strategy,
+                "initial_training": bool(is_initial_training),
+                "training_rows_total": int(len(features)),
+            }
+        )
+
+        model_path = self._save_model_version(pipeline, metrics)
+        self._save_current_model(pipeline, metrics, model_path, model_name)
+        self._save_best_model(pipeline, metrics, model_path)
+        self._append_metrics([metrics], model_path)
+
+        self.logger.info("Incremental model updated: %s", metrics)
+        return model_path, metrics
+
+    def _incremental_training_dataset(
+        self,
+        latest_processed_path: Path,
+        is_initial_training: bool,
+    ) -> pd.DataFrame:
+        if not is_initial_training:
+            return self._load_processed_batch(latest_processed_path)
+
+        dataset = self._load_training_dataset()
+        max_rows = self.config.model.initial_training_max_rows
+        if max_rows > 0 and len(dataset) > max_rows:
+            dataset = dataset.tail(max_rows).copy()
+        return dataset.reset_index(drop=True)
+
     def _load_training_dataset(self) -> pd.DataFrame:
         paths = sorted(self.config.paths.processed_data_dir.glob("batch_*_processed.csv"))
         if not paths:
@@ -101,11 +208,33 @@ class ModelTrainer:
 
         frames = [pd.read_csv(path) for path in paths]
         dataset = pd.concat(frames, ignore_index=True)
+        return self._sort_by_time(dataset)
+
+    def _load_processed_batch(self, processed_path: Path) -> pd.DataFrame:
+        dataset = pd.read_csv(processed_path)
+        return self._sort_by_time(dataset)
+
+    def _sort_by_time(self, dataset: pd.DataFrame) -> pd.DataFrame:
         dataset[self.config.data.time_column] = pd.to_datetime(
             dataset[self.config.data.time_column],
             errors="coerce",
         )
         return dataset.sort_values(self.config.data.time_column).reset_index(drop=True)
+
+    def _time_holdout_split(
+        self,
+        features: pd.DataFrame,
+        target: pd.Series,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        train_size = max(int(len(features) * 0.8), 1)
+        if train_size >= len(features):
+            train_size = len(features) - 1
+        return (
+            features.iloc[:train_size],
+            features.iloc[train_size:],
+            target.iloc[:train_size],
+            target.iloc[train_size:],
+        )
 
     def _build_features_and_target(
         self,
@@ -137,7 +266,12 @@ class ModelTrainer:
 
         for column in self.config.data_schema.categorical_columns:
             if column in training.columns:
-                features[column] = training[column].astype("string")
+                categorical = training[column]
+                features[column] = (
+                    categorical.astype("string")
+                    .astype("object")
+                    .where(categorical.notna(), np.nan)
+                )
 
         time_column = self.config.data.time_column
         if time_column in training.columns:
@@ -202,6 +336,18 @@ class ModelTrainer:
                 **self._with_random_state(model_parameters, random_seed)
             )
         raise ValueError(f"Unsupported model name: {model_name}")
+
+    def _models_to_train(self) -> tuple[str, ...]:
+        if self.config.model.training_mode == "all":
+            return self.config.model.candidate_models
+        if self.config.model.training_mode == "single":
+            selected_model = self.config.model.selected_model
+            if selected_model not in self.config.model.candidate_models:
+                raise ValueError(
+                    f"Selected model is not in candidate_models: {selected_model}"
+                )
+            return (selected_model,)
+        raise ValueError(f"Unsupported training mode: {self.config.model.training_mode}")
 
     def _model_parameters(self, model_name: str) -> dict[str, Any]:
         return dict(self.config.model.model_parameters.get(model_name, {}))
@@ -293,6 +439,24 @@ class ModelTrainer:
 
         joblib.dump(payload, self.best_model_path)
 
+    def _save_current_model(
+        self,
+        pipeline: SklearnPipeline,
+        metrics: dict[str, Any],
+        model_path: Path,
+        model_name: str,
+    ) -> None:
+        self.current_model_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(
+            {
+                "pipeline": pipeline,
+                "metrics": metrics,
+                "model_path": str(model_path),
+                "model_name": model_name,
+            },
+            self.current_model_path,
+        )
+
     def _append_metrics(
         self,
         metrics_rows: list[dict[str, Any]],
@@ -325,6 +489,10 @@ class ModelTrainer:
             "train_rows",
             "valid_rows",
             "is_best_in_update",
+            "training_mode",
+            "update_strategy",
+            "initial_training",
+            "training_rows_total",
             "latest_processed_path",
             "model_path",
         ]

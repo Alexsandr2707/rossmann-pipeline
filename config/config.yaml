@@ -65,6 +65,11 @@ quality:
 model:
   primary_metric: rmse
   incremental_model: sgd_regression
+  training_mode: single
+  selected_model: sgd_regression
+  update_strategy: incremental
+  initial_training_batches: 20
+  initial_training_max_rows: 0
   candidate_models:
     - linear_regression
     - elastic_net_regression
@@ -91,5 +96,7 @@ model_parameters:
     n_jobs: -1
   sgd_regression:
     alpha: 0.0001
+    learning_rate: constant
+    eta0: 0.000000001
     max_iter: 2000
     tol: 0.001
