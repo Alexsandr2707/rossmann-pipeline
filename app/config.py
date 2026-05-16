@@ -14,9 +14,9 @@ class ProjectConfig:
 @dataclass(frozen=True)
 class DataConfig:
     source_paths: tuple[Path, ...]
+    store_path: Path | None
     time_column: str
     target_column: str
-    batch_size: int
     min_rows: int
     min_features: int
     min_categorical_features: int
@@ -51,28 +51,24 @@ class PathConfig:
     predictions_dir: Path
     collector_state_path: Path
     batch_metadata_path: Path
-    data_quality_history_path: Path
     model_metrics_history_path: Path
     best_model_path: Path
     pipeline_log_path: Path
 
 
 @dataclass(frozen=True)
-class QualityConfig:
-    max_missing_part: float
-    max_duplicate_part: float
-
-
-@dataclass(frozen=True)
 class ModelConfig:
     primary_metric: str
-    incremental_model: str
     candidate_models: tuple[str, ...]
     training_mode: str
     selected_model: str
     update_strategy: str
-    initial_training_batches: int
-    initial_training_max_rows: int
+    stream_batch_days: int
+    initial_train_ratio: float
+    validation_ratio: float
+    stream_ratio: float
+    rolling_train_period_days: int
+    pretrain_mark_collector_state: bool
     model_parameters: dict[str, dict[str, Any]]
 
 
@@ -83,7 +79,6 @@ class Config:
     target_preprocessing: TargetPreprocessingConfig
     data_schema: DataSchemaConfig
     paths: PathConfig
-    quality: QualityConfig
     model: ModelConfig
 
 
@@ -111,7 +106,6 @@ def load_config(path: str | Path) -> Config:
     target_preprocessing = _require_section(raw, "target_preprocessing")
     data_schema = _require_section(raw, "data_schema")
     paths = _require_section(raw, "paths")
-    quality = _require_section(raw, "quality")
     model = _require_section(raw, "model")
 
     return Config(
@@ -121,9 +115,9 @@ def load_config(path: str | Path) -> Config:
         ),
         data=DataConfig(
             source_paths=tuple(_path(item) for item in data["source_paths"]),
+            store_path=_path(data["store_path"]) if data.get("store_path") else None,
             time_column=str(data["time_column"]),
             target_column=str(data["target_column"]),
-            batch_size=int(data["batch_size"]),
             min_rows=int(data["min_rows"]),
             min_features=int(data["min_features"]),
             min_categorical_features=int(data["min_categorical_features"]),
@@ -156,24 +150,28 @@ def load_config(path: str | Path) -> Config:
             predictions_dir=_path(paths["predictions_dir"]),
             collector_state_path=_path(paths["collector_state_path"]),
             batch_metadata_path=_path(paths["batch_metadata_path"]),
-            data_quality_history_path=_path(paths["data_quality_history_path"]),
             model_metrics_history_path=_path(paths["model_metrics_history_path"]),
             best_model_path=_path(paths["best_model_path"]),
             pipeline_log_path=_path(paths["pipeline_log_path"]),
         ),
-        quality=QualityConfig(
-            max_missing_part=float(quality["max_missing_part"]),
-            max_duplicate_part=float(quality["max_duplicate_part"]),
-        ),
         model=ModelConfig(
             primary_metric=str(model["primary_metric"]),
-            incremental_model=str(model["incremental_model"]),
             candidate_models=tuple(model["candidate_models"]),
             training_mode=str(model.get("training_mode", "all")),
-            selected_model=str(model.get("selected_model", model["incremental_model"])),
-            update_strategy=str(model.get("update_strategy", "refit")),
-            initial_training_batches=int(model.get("initial_training_batches", 1)),
-            initial_training_max_rows=int(model.get("initial_training_max_rows", 0)),
+            selected_model=str(
+                model.get("selected_model", model["candidate_models"][0])
+            ),
+            update_strategy=str(model.get("update_strategy", "full_refit")),
+            stream_batch_days=int(model.get("stream_batch_days", 7)),
+            initial_train_ratio=float(model.get("initial_train_ratio", 0.50)),
+            validation_ratio=float(model.get("validation_ratio", 0.20)),
+            stream_ratio=float(model.get("stream_ratio", 0.30)),
+            rolling_train_period_days=int(
+                model.get("rolling_train_period_days", 365)
+            ),
+            pretrain_mark_collector_state=bool(
+                model.get("pretrain_mark_collector_state", True)
+            ),
             model_parameters=_model_parameters(raw.get("model_parameters", {})),
         ),
     )
@@ -214,61 +212,61 @@ def _load_yaml(content: str) -> dict[str, Any]:
 
 
 def _load_simple_yaml(content: str) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    current_section: str | None = None
-    current_list_key: str | None = None
-    current_nested_key: str | None = None
-
+    lines: list[tuple[int, str, str]] = []
     for raw_line in content.splitlines():
         line = raw_line.split("#", 1)[0].rstrip()
         if not line:
             continue
-
         indent = len(raw_line) - len(raw_line.lstrip(" "))
+        lines.append((indent, line.strip(), raw_line))
 
-        if indent == 0:
-            if not line.endswith(":"):
-                raise ValueError(f"Invalid top-level YAML line: {raw_line}")
-            current_section = line[:-1]
-            result[current_section] = {}
-            current_list_key = None
-            current_nested_key = None
-            continue
+    result: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any] | list[Any]]] = [(-1, result)]
 
-        if current_section is None:
-            raise ValueError(f"YAML key without section: {raw_line}")
+    for index, (indent, stripped, raw_line) in enumerate(lines):
+        while indent <= stack[-1][0]:
+            stack.pop()
 
-        stripped = line.strip()
-        section = result[current_section]
-
+        parent = stack[-1][1]
         if stripped.startswith("- "):
-            if current_list_key is None:
-                raise ValueError(f"YAML list item without list key: {raw_line}")
-            section[current_list_key].append(_parse_scalar(stripped[2:]))
+            if not isinstance(parent, list):
+                raise ValueError(f"YAML list item without list parent: {raw_line}")
+            parent.append(_parse_scalar(stripped[2:]))
             continue
 
         key, separator, value = stripped.partition(":")
         if not separator:
             raise ValueError(f"Invalid YAML key-value line: {raw_line}")
+        if not isinstance(parent, dict):
+            raise ValueError(f"YAML mapping item inside list is unsupported: {raw_line}")
 
-        if indent == 4:
-            if current_nested_key is None:
-                raise ValueError(f"Nested YAML key without parent: {raw_line}")
-            if not isinstance(section[current_nested_key], dict):
-                section[current_nested_key] = {}
-            section[current_nested_key][key] = _parse_scalar(value.strip())
+        clean_value = value.strip()
+        if clean_value:
+            parent[key] = _parse_scalar(clean_value)
             continue
 
-        if value.strip() == "":
-            section[key] = []
-            current_list_key = key
-            current_nested_key = key
+        next_container: dict[str, Any] | list[Any]
+        next_line = _next_nested_yaml_line(lines, index, indent)
+        if next_line is not None and next_line[1].startswith("- "):
+            next_container = []
         else:
-            section[key] = _parse_scalar(value.strip())
-            current_list_key = None
-            current_nested_key = None
+            next_container = {}
+        parent[key] = next_container
+        stack.append((indent, next_container))
 
     return result
+
+
+def _next_nested_yaml_line(
+    lines: list[tuple[int, str, str]],
+    index: int,
+    indent: int,
+) -> tuple[int, str, str] | None:
+    for next_line in lines[index + 1 :]:
+        if next_line[0] <= indent:
+            return None
+        return next_line
+    return None
 
 
 def _parse_scalar(value: str) -> str | int | float | bool | None:

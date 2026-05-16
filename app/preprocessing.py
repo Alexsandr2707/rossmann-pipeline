@@ -21,9 +21,13 @@ class DataPreprocessor:
         transformed = self._transform_time_column(transformed)
         transformed = self._transform_target_column(transformed)
         transformed = self._apply_schema_types(transformed)
-        transformed = transformed.sort_values(
-            [self.config.data.time_column, "_source_file"]
-        ).reset_index(drop=True)
+        transformed = self._drop_leakage_columns(transformed)
+        sort_columns = [
+            column
+            for column in (self.config.data.time_column, "_source_file")
+            if column in transformed.columns
+        ]
+        transformed = transformed.sort_values(sort_columns).reset_index(drop=True)
         return transformed
 
     def _transform_time_column(self, dataset: pd.DataFrame) -> pd.DataFrame:
@@ -33,7 +37,6 @@ class DataPreprocessor:
 
         dataset[time_column] = pd.to_datetime(
             dataset[time_column],
-            format="%d-%b-%y",
             errors="coerce",
         )
         return dataset.dropna(subset=[time_column]).copy()
@@ -65,6 +68,16 @@ class DataPreprocessor:
 
         return dataset
 
+    def _drop_leakage_columns(self, dataset: pd.DataFrame) -> pd.DataFrame:
+        leakage_columns = [
+            column
+            for column in self.config.data_schema.service_columns
+            if column != "_source_file" and column in dataset.columns
+        ]
+        if not leakage_columns:
+            return dataset
+        return dataset.drop(columns=leakage_columns)
+
     def _apply_schema_types(self, dataset: pd.DataFrame) -> pd.DataFrame:
         for column in self.config.data_schema.numeric_columns:
             if column in dataset.columns:
@@ -83,7 +96,6 @@ class DataPreprocessor:
             if column in dataset.columns and column != self.config.data.time_column:
                 dataset[column] = pd.to_datetime(
                     dataset[column],
-                    format="%d-%b-%y",
                     errors="coerce",
                 )
 

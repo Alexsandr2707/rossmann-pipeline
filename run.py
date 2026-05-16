@@ -10,7 +10,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-mode",
         required=True,
-        choices=("inference", "update", "summary", "reset"),
+        choices=("inference", "update", "pretrain", "summary", "reset", "evaluate"),
         help="Pipeline mode to run.",
     )
     parser.add_argument(
@@ -43,18 +43,20 @@ def main() -> int:
             if not args.file:
                 print("Inference mode requires -file.", file=sys.stderr)
                 return 2
-            result = pipeline.inference(Path(args.file))
+            pipeline.inference(Path(args.file))
         elif args.mode == "update":
-            result = pipeline.update()
+            pipeline.update()
+        elif args.mode == "pretrain":
+            pipeline.pretrain()
         elif args.mode == "reset":
-            result = pipeline.reset()
+            pipeline.reset()
+        elif args.mode == "evaluate":
+            pipeline.evaluate()
         else:
-            result = pipeline.summary()
+            pipeline.summary()
     except NotImplementedError as error:
         print(str(error), file=sys.stderr)
         return 1
-
-    print(result)
     return 0
 
 

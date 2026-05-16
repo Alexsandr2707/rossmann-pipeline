@@ -1,45 +1,47 @@
 project:
-  name: mlops_streaming_mvp
+  name: rossmann_sales_forecasting
   random_seed: 42
 
 data:
   source_paths:
-    - data/external/motor_data11-14lats.csv
-    - data/external/motor_data14-2018.csv
-  time_column: INSR_BEGIN
-  target_column: CLAIM_PAID
-  batch_size: 5000
+    - data/external/train.csv
+  store_path: data/external/store.csv
+  time_column: Date
+  target_column: Sales
   min_rows: 10000
   min_features: 10
   min_categorical_features: 2
 
 target_preprocessing:
-  missing_strategy: fill_zero
+  missing_strategy: drop
   missing_fill_value: 0.0
-  add_missing_indicator: true
+  add_missing_indicator: false
   missing_indicator_suffix: _WAS_MISSING
 
 data_schema:
   numeric_columns:
-    - INSURED_VALUE
-    - PREMIUM
-    - PROD_YEAR
-    - SEATS_NUM
-    - CARRYING_CAPACITY
-    - CCM_TON
+    - DayOfWeek
+    - Open
+    - Promo
+    - SchoolHoliday
+    - CompetitionDistance
+    - CompetitionOpenSinceMonth
+    - CompetitionOpenSinceYear
+    - Promo2
+    - Promo2SinceWeek
+    - Promo2SinceYear
   categorical_columns:
-    - SEX
-    - EFFECTIVE_YR
-    - INSR_TYPE
-    - TYPE_VEHICLE
-    - MAKE
-    - USAGE
+    - Store
+    - StateHoliday
+    - StoreType
+    - Assortment
+    - PromoInterval
   datetime_columns:
-    - INSR_BEGIN
-    - INSR_END
+    - Date
   id_columns:
-    - OBJECT_ID
+    - Id
   service_columns:
+    - Customers
     - _source_file
 
 paths:
@@ -53,50 +55,38 @@ paths:
   predictions_dir: artifacts/predictions
   collector_state_path: artifacts/collector_state.json
   batch_metadata_path: artifacts/batch_metadata_history.csv
-  data_quality_history_path: artifacts/data_quality_history.csv
   model_metrics_history_path: artifacts/model_metrics_history.csv
   best_model_path: models/best_model.pkl
   pipeline_log_path: logs/pipeline.log
 
-quality:
-  max_missing_part: 0.5
-  max_duplicate_part: 0.1
-  
 model:
   primary_metric: rmse
-  incremental_model: sgd_regression
   training_mode: single
-  selected_model: sgd_regression
-  update_strategy: incremental
-  initial_training_batches: 20
-  initial_training_max_rows: 0
+  selected_model: decision_tree_regression
+  update_strategy: full_refit
+  stream_batch_days: 7
+  initial_train_ratio: 0.50
+  validation_ratio: 0.20
+  stream_ratio: 0.30
+  rolling_train_period_days: 365
+  pretrain_mark_collector_state: true
   candidate_models:
-    - linear_regression
-    - elastic_net_regression
-    - knn_regression
     - decision_tree_regression
-    - random_forest_regression
+    - knn_regression
+    - ridge_regression
     - sgd_regression
 
 model_parameters:
-  linear_regression:
-    fit_intercept: true
-  elastic_net_regression:
-    alpha: 1.0
-    l1_ratio: 0.5
-    max_iter: 5000
-  knn_regression:
-    n_neighbors: 5
-    weights: uniform
   decision_tree_regression:
-    min_samples_leaf: 1
-  random_forest_regression:
-    n_estimators: 50
-    min_samples_leaf: 1
-    n_jobs: -1
+    min_samples_leaf: 20
+  knn_regression:
+    n_neighbors: 8
+    weights: distance
+  ridge_regression:
+    alpha: 1.0
   sgd_regression:
+    loss: squared_error
+    penalty: l2
     alpha: 0.0001
-    learning_rate: constant
-    eta0: 0.000000001
-    max_iter: 2000
+    max_iter: 1000
     tol: 0.001

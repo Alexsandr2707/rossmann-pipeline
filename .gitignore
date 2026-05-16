@@ -16,6 +16,7 @@ data/processed/*
 artifacts/*
 !artifacts/.gitkeep
 !artifacts/predictions/
+artifacts/predictions/*
 !artifacts/predictions/.gitkeep
 
 models/*
