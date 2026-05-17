@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from app.config import Config
-from app.reporting import generate_summary_report
+from app.reporting import generate_html_report, generate_summary_report
 
 
 class Pipeline:
@@ -117,7 +117,12 @@ class Pipeline:
     def summary(self) -> Path:
         self.logger.info("Summary mode requested")
         report_path = generate_summary_report(self.config)
-        self.logger.info("Summary completed: report saved to %s", report_path)
+        dashboard_path = generate_html_report(self.config)
+        self.logger.info(
+            "Summary completed: report saved to %s; dashboard saved to %s",
+            report_path,
+            dashboard_path,
+        )
         return report_path
 
     def evaluate(self) -> Path:

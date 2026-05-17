@@ -38,6 +38,7 @@ python run.py -mode pretrain
 python run.py -mode evaluate
 python run.py -mode inference -file data/external/test.csv
 python run.py -mode summary
+python run.py -mode summary -open
 python run.py -mode reset
 ```
 
@@ -51,6 +52,10 @@ Evaluation outputs:
 - `reports/offline_model_evaluation.md`
 - `reports/figures/offline_evaluation/actual_vs_prediction_timeline.svg`
 - `artifacts/offline_model_evaluation.csv`
+
+`summary` writes both the Markdown summary and a browser-friendly dashboard at
+`reports/index.html`. Use `python run.py -mode summary -open` to generate it
+and open it with the default browser.
 
 ## Training
 

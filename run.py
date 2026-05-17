@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
+import webbrowser
 from pathlib import Path
 
 
@@ -23,11 +25,19 @@ def parse_args() -> argparse.Namespace:
         default="config/config.yaml",
         help="Path to YAML configuration file.",
     )
+    parser.add_argument(
+        "-open",
+        action="store_true",
+        help="Open the generated HTML dashboard after summary mode.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.open and args.mode != "summary":
+        print("-open can only be used with -mode summary.", file=sys.stderr)
+        return 2
 
     from app.config import load_config
     from app.logging_utils import configure_logging
@@ -54,10 +64,42 @@ def main() -> int:
             pipeline.evaluate()
         else:
             pipeline.summary()
+            dashboard_path = config.paths.reports_dir / "index.html"
+            if args.open:
+                open_report(dashboard_path)
     except NotImplementedError as error:
         print(str(error), file=sys.stderr)
         return 1
     return 0
+
+
+def open_report(path: Path) -> None:
+    full_path = path.resolve()
+    try:
+        # open the file in the default application
+        if is_wsl():
+            windows_path = subprocess.check_output(
+                ["wslpath", "-w", str(full_path)],
+                text=True,
+            ).strip()
+            subprocess.Popen(
+                ["cmd.exe", "/c", "start", "", windows_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+
+        webbrowser.open(full_path.as_uri())
+    except OSError as error:
+        print(f"Could not open browser automatically: {error}", file=sys.stderr)
+        print(f"Open this file manually: {full_path}", file=sys.stderr)
+
+
+def is_wsl() -> bool:
+    version_path = Path("/proc/version")
+    if not version_path.exists():
+        return False
+    return "microsoft" in version_path.read_text(encoding="utf-8").lower()
 
 
 if __name__ == "__main__":
