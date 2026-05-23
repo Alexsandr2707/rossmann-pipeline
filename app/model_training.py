@@ -16,6 +16,7 @@ from sklearn.pipeline import Pipeline as SklearnPipeline
 from scipy.stats import pearsonr
 
 from app.config import Config
+from app.feature_engineering import build_features_and_target
 from app.model_diagnostics import ModelDiagnosticsWriter
 from app.models import (
     FEATURE_PREPROCESSING_VERSION,
@@ -94,7 +95,7 @@ class ModelTrainer:
         )
         x_train, y_train = self._build_features_and_target(initial_dataset)
         x_valid, y_valid = self._build_features_and_target(validation_dataset)
-        valid_dates = self._target_dates(validation_dataset)
+        valid_dates = self.target_dates(validation_dataset)
 
         if len(x_train) < 10 or len(x_valid) < 1:
             raise ValueError("Not enough rows for model pretraining.")
@@ -103,7 +104,7 @@ class ModelTrainer:
         refitted_models: dict[str, SklearnPipeline] = {}
 
         for model_name in self._models_to_train():
-            pipeline = self._fit_pipeline(x_train, y_train, model_name)
+            pipeline = self.fit_pipeline(x_train, y_train, model_name)
             predictions = pipeline.predict(x_valid)
             x_valid_transformed = pipeline.named_steps["preprocessor"].transform(
                 x_valid
@@ -152,7 +153,7 @@ class ModelTrainer:
             start_features, start_target = self._build_features_and_target(
                 start_dataset
             )
-            refitted_models[model_name] = self._fit_pipeline(
+            refitted_models[model_name] = self.fit_pipeline(
                 start_features,
                 start_target,
                 model_name,
@@ -196,7 +197,7 @@ class ModelTrainer:
 
         batch = self._load_processed_batch(latest_processed_path)
         features, target = self._build_features_and_target(batch)
-        dates = self._target_dates(batch)
+        dates = self.target_dates(batch)
         predictions = pipeline.predict(features)
         transformed_features = pipeline.named_steps["preprocessor"].transform(features)
         metrics = self._calculate_metrics(
@@ -331,9 +332,9 @@ class ModelTrainer:
         features, target = self._build_features_and_target(dataset)
         if len(features) < 10:
             raise ValueError("Not enough rows for model refit.")
-        return self._fit_pipeline(features, target, model_name)
+        return self.fit_pipeline(features, target, model_name)
 
-    def _fit_pipeline(
+    def fit_pipeline(
         self,
         features: pd.DataFrame,
         target: pd.Series,
@@ -377,44 +378,9 @@ class ModelTrainer:
         self,
         dataset: pd.DataFrame,
     ) -> tuple[pd.DataFrame, pd.Series]:
-        target_column = self.config.data.target_column
-        if target_column not in dataset.columns:
-            raise ValueError(f"Target column is missing: {target_column}")
+        return build_features_and_target(dataset, self.config)
 
-        target = pd.to_numeric(dataset[target_column], errors="coerce")
-        training = dataset[target.notna()].copy()
-        target = target[target.notna()]
-
-        features = pd.DataFrame(index=training.index)
-        excluded_columns = self._excluded_feature_columns()
-
-        for column in self.config.data_schema.numeric_columns:
-            if column in training.columns and column not in excluded_columns:
-                features[column] = pd.to_numeric(training[column], errors="coerce")
-
-        for column in self.config.data_schema.categorical_columns:
-            if column in training.columns and column not in excluded_columns:
-                categorical = training[column]
-                features[column] = (
-                    categorical.astype("string")
-                    .astype("object")
-                    .where(categorical.notna(), np.nan)
-                )
-
-        time_column = self.config.data.time_column
-        if time_column in training.columns:
-            parsed_time = pd.to_datetime(training[time_column], errors="coerce")
-            features[f"{time_column}_year"] = parsed_time.dt.year
-            features[f"{time_column}_month"] = parsed_time.dt.month
-            features[f"{time_column}_quarter"] = parsed_time.dt.quarter
-            features[f"{time_column}_day"] = parsed_time.dt.day
-            features[f"{time_column}_weekofyear"] = (
-                parsed_time.dt.isocalendar().week.astype("float64")
-            )
-
-        return features.reset_index(drop=True), target.reset_index(drop=True)
-
-    def _target_dates(self, dataset: pd.DataFrame) -> pd.Series:
+    def target_dates(self, dataset: pd.DataFrame) -> pd.Series:
         target_column = self.config.data.target_column
         time_column = self.config.data.time_column
         target = pd.to_numeric(dataset[target_column], errors="coerce")
@@ -423,14 +389,6 @@ class ModelTrainer:
             errors="coerce",
         )
         return dates.reset_index(drop=True)
-
-    def _excluded_feature_columns(self) -> set[str]:
-        return {
-            self.config.data.target_column,
-            "Customers",
-            *self.config.data_schema.id_columns,
-            *self.config.data_schema.service_columns,
-        }
 
     def _make_feature_preprocessor(self, features: pd.DataFrame) -> Any:
         return make_feature_preprocessor(features)

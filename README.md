@@ -17,7 +17,7 @@ Expected files:
 
 - `data/external/train.csv`
 - `data/external/store.csv`
-- `data/external/test.csv` for future inference only
+- `data/external/test.csv` for inference
 - `data/external/sample_submission.csv`
 
 The training source is `train.csv`. Before preprocessing, it is joined with
@@ -42,10 +42,17 @@ python run.py -mode summary -open
 python run.py -mode reset
 ```
 
-`inference` is still a placeholder. `evaluate` is the main sanity-check command:
-it loads full `train.csv`, merges `store.csv`, applies the same date-period
-split as `pretrain`, trains configured regression models on the initial period
-and compares validation-period predictions with simple baselines.
+`inference` loads an external CSV such as `data/external/test.csv`, merges
+`store.csv` by `Store` when store metadata is available, applies the same
+feature-building logic as training, loads `models/best_model.pkl`, and writes
+the original input columns plus `predict` to:
+
+- `artifacts/predictions/inference_<timestamp>.csv`
+
+`evaluate` is the main sanity-check command: it loads full `train.csv`, merges
+`store.csv`, applies the same date-period split as `pretrain`, trains configured
+regression models on the initial period and compares validation-period
+predictions with simple baselines.
 
 Evaluation outputs:
 
@@ -56,6 +63,10 @@ Evaluation outputs:
 `summary` writes both the Markdown summary and a browser-friendly dashboard at
 `reports/index.html`. Use `python run.py -mode summary -open` to generate it
 and open it with the default browser.
+
+CLI commands print their primary result to stdout: `update` prints `True` or
+`False`, `inference` prints the prediction CSV path, and `summary` prints the
+Markdown report path.
 
 ## Training
 
@@ -92,7 +103,9 @@ Runtime `update` mode emulates streaming by writing the next
 - `data/processed/batch_XXXX_processed.csv`
 - `artifacts/collector_state.json`
 - `artifacts/batch_metadata_history.csv`
+- `artifacts/data_quality_history.csv`
 - `artifacts/model_metrics_history.csv`
+- `reports/eda_batch_XXXX.md`
 - `models/model_vXXXX_<model_name>.pkl`
 - `models/best_model.pkl`
 - `reports/model_diagnostics_latest.md`
@@ -101,6 +114,10 @@ Runtime `update` mode emulates streaming by writing the next
 
 Regression metrics include `rmse`, `mae`, `r2`, `smape`, `pearson_corr` and
 `pearson_p_value`. The primary model-selection metric is `rmse`.
+
+Data Quality metrics include missingness, duplicate rows, constant columns,
+schema drift, IQR outlier share and categorical cardinality. Summary reports
+read these metrics from `artifacts/data_quality_history.csv`.
 
 `reset` removes generated runtime artifacts and keeps source CSV files, config,
 code and `.gitkeep` files.

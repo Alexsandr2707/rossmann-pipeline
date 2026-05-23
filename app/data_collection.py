@@ -34,6 +34,9 @@ class DataCollector:
     def current_stream_batch_index(self) -> int:
         return self._load_state().stream_batch_index
 
+    def load_sorted_source_dataset(self) -> pd.DataFrame:
+        return self._load_dataset()
+
     def initialize_stream_state(self, dataset: pd.DataFrame) -> CollectorState:
         state = self._load_state()
         state.stream_batch_index = 0

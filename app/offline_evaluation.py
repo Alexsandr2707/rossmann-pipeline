@@ -9,6 +9,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from app.config import Config
 from app.dataset_loading import load_source_dataset
+from app.feature_engineering import build_features_and_target
 from app.model_training import ModelTrainer
 from app.models import canonical_model_name
 from app.period_splitting import DatePeriodSplit, rows_for_dates, split_date_periods
@@ -35,9 +36,9 @@ class OfflineModelEvaluator:
             self.config.data.time_column,
             split.validation_dates,
         )
-        x_train, y_train = self.trainer._build_features_and_target(initial_dataset)
-        x_valid, y_valid = self.trainer._build_features_and_target(validation_dataset)
-        validation_dates = self.trainer._target_dates(validation_dataset)
+        x_train, y_train = build_features_and_target(initial_dataset, self.config)
+        x_valid, y_valid = build_features_and_target(validation_dataset, self.config)
+        validation_dates = self.trainer.target_dates(validation_dataset)
 
         rows: list[dict[str, Any]] = [
             self._regression_metrics(
@@ -114,7 +115,7 @@ class OfflineModelEvaluator:
         y_train: pd.Series,
         y_valid: pd.Series,
     ) -> tuple[dict[str, Any], np.ndarray]:
-        pipeline = self.trainer._fit_pipeline(x_train, y_train, model_name)
+        pipeline = self.trainer.fit_pipeline(x_train, y_train, model_name)
         predictions = np.clip(
             np.asarray(pipeline.predict(x_valid), dtype=float),
             0.0,
@@ -349,19 +350,4 @@ class OfflineModelEvaluator:
         return float((baseline - candidate) / baseline)
 
     def _markdown_table(self, dataset: pd.DataFrame) -> str:
-        columns = list(dataset.columns)
-        lines = [
-            "| " + " | ".join(columns) + " |",
-            "| " + " | ".join("---" for _ in columns) + " |",
-        ]
-        for _, row in dataset.iterrows():
-            values = [self._format_markdown_value(row[column]) for column in columns]
-            lines.append("| " + " | ".join(values) + " |")
-        return "\n".join(lines)
-
-    def _format_markdown_value(self, value: Any) -> str:
-        if pd.isna(value):
-            return ""
-        if isinstance(value, float):
-            return f"{value:.6g}"
-        return str(value).replace("|", "\\|")
+        return dataset.fillna("").to_markdown(index=False, floatfmt=".6g")

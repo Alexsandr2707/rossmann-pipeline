@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from app.config import Config
 
 DEFAULT_TAIL_ROWS = 5
@@ -17,6 +19,7 @@ def generate_summary_report(config: Config) -> Path:
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
     batch_history = _read_history(config.paths.batch_metadata_path)
+    data_quality_history = _read_history(config.paths.data_quality_history_path)
     model_history = _read_history(config.paths.model_metrics_history_path)
 
     lines: list[str] = [
@@ -26,6 +29,8 @@ def generate_summary_report(config: Config) -> Path:
         "",
     ]
     lines.extend(_latest_batch_section(batch_history, report_path.parent))
+    lines.extend(["", "## Latest data quality metrics", ""])
+    lines.extend(_latest_data_quality_section(data_quality_history, report_path.parent))
     lines.extend(["", "## Model metrics trend", ""])
     lines.extend(_model_metrics_trend_section(model_history, report_path.parent))
     lines.extend(["", "## Source artifacts", ""])
@@ -126,9 +131,64 @@ def _model_metrics_trend_section(
     return lines
 
 
+def _latest_data_quality_section(
+    history: list[dict[str, str]] | None,
+    report_dir: Path,
+) -> list[str]:
+    if history is None:
+        return [
+            "No data quality history is available yet.",
+            "",
+            f"- Expected file: `{_relative_path(report_dir, Path('artifacts/data_quality_history.csv'))}`",
+        ]
+
+    latest_row = history[-1]
+    fields = [
+        "batch_index",
+        "stream_batch_index",
+        "period_type",
+        "batch_path",
+        "rows",
+        "columns",
+        "missing_part",
+        "duplicate_rows",
+        "duplicate_part",
+        "constant_columns",
+        "schema_missing_columns",
+        "schema_extra_columns",
+        "numeric_outlier_part",
+        "category_cardinality",
+    ]
+    lines = [f"- History rows: {len(history)}"]
+    for field in fields:
+        if field not in latest_row:
+            continue
+        lines.append(f"- {field}: {_format_value(latest_row[field])}")
+
+    report_path = latest_row.get("eda_report_path", "")
+    if report_path:
+        lines.append(f"- EDA report: `{_relative_path(report_dir, Path(report_path))}`")
+
+    table = _tail_markdown_table(
+        history,
+        [
+            "batch_index",
+            "rows",
+            "missing_part",
+            "duplicate_part",
+            "numeric_outlier_part",
+        ],
+        tail_rows=DEFAULT_TAIL_ROWS,
+    )
+    if table is not None:
+        lines.extend(["", table])
+    return lines
+
+
 def _artifact_links(config: Config, report_dir: Path) -> list[str]:
     artifact_paths = [
         config.paths.batch_metadata_path,
+        config.paths.data_quality_history_path,
         config.paths.model_metrics_history_path,
     ]
     lines: list[str] = []
@@ -165,14 +225,11 @@ def _tail_markdown_table(
     if not subset:
         return None
 
-    lines = [
-        "| " + " | ".join(selected_columns) + " |",
-        "| " + " | ".join(["---"] * len(selected_columns)) + " |",
+    rows = [
+        {column: _format_value(row.get(column, "")) for column in selected_columns}
+        for row in subset
     ]
-    for row in subset:
-        values = [_format_value(row.get(column, "")) for column in selected_columns]
-        lines.append("| " + " | ".join(values) + " |")
-    return "\n".join(lines)
+    return pd.DataFrame(rows).to_markdown(index=False)
 
 
 def _format_value(value: Any) -> str:

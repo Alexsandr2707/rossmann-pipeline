@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 @dataclass(frozen=True)
 class ProjectConfig:
@@ -51,6 +53,7 @@ class PathConfig:
     predictions_dir: Path
     collector_state_path: Path
     batch_metadata_path: Path
+    data_quality_history_path: Path
     model_metrics_history_path: Path
     best_model_path: Path
     pipeline_log_path: Path
@@ -96,7 +99,7 @@ def _path(value: str) -> Path:
 def load_config(path: str | Path) -> Config:
     config_path = Path(path)
     with config_path.open("r", encoding="utf-8") as file:
-        raw = _load_yaml(file.read())
+        raw = yaml.safe_load(file.read())
 
     if not isinstance(raw, dict):
         raise ValueError(f"Invalid config file: {config_path}")
@@ -150,6 +153,12 @@ def load_config(path: str | Path) -> Config:
             predictions_dir=_path(paths["predictions_dir"]),
             collector_state_path=_path(paths["collector_state_path"]),
             batch_metadata_path=_path(paths["batch_metadata_path"]),
+            data_quality_history_path=_path(
+                paths.get(
+                    "data_quality_history_path",
+                    "artifacts/data_quality_history.csv",
+                )
+            ),
             model_metrics_history_path=_path(paths["model_metrics_history_path"]),
             best_model_path=_path(paths["best_model_path"]),
             pipeline_log_path=_path(paths["pipeline_log_path"]),
@@ -197,88 +206,3 @@ def _model_parameters(raw: Any) -> dict[str, dict[str, Any]]:
             for parameter_name, parameter_value in model_params.items()
         }
     return parameters
-
-
-def _load_yaml(content: str) -> dict[str, Any]:
-    try:
-        import yaml  # type: ignore[import-not-found]
-    except ModuleNotFoundError:
-        return _load_simple_yaml(content)
-
-    loaded = yaml.safe_load(content)
-    if not isinstance(loaded, dict):
-        raise ValueError("Config file must contain a mapping.")
-    return loaded
-
-
-def _load_simple_yaml(content: str) -> dict[str, Any]:
-    lines: list[tuple[int, str, str]] = []
-    for raw_line in content.splitlines():
-        line = raw_line.split("#", 1)[0].rstrip()
-        if not line:
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        lines.append((indent, line.strip(), raw_line))
-
-    result: dict[str, Any] = {}
-    stack: list[tuple[int, dict[str, Any] | list[Any]]] = [(-1, result)]
-
-    for index, (indent, stripped, raw_line) in enumerate(lines):
-        while indent <= stack[-1][0]:
-            stack.pop()
-
-        parent = stack[-1][1]
-        if stripped.startswith("- "):
-            if not isinstance(parent, list):
-                raise ValueError(f"YAML list item without list parent: {raw_line}")
-            parent.append(_parse_scalar(stripped[2:]))
-            continue
-
-        key, separator, value = stripped.partition(":")
-        if not separator:
-            raise ValueError(f"Invalid YAML key-value line: {raw_line}")
-        if not isinstance(parent, dict):
-            raise ValueError(f"YAML mapping item inside list is unsupported: {raw_line}")
-
-        clean_value = value.strip()
-        if clean_value:
-            parent[key] = _parse_scalar(clean_value)
-            continue
-
-        next_container: dict[str, Any] | list[Any]
-        next_line = _next_nested_yaml_line(lines, index, indent)
-        if next_line is not None and next_line[1].startswith("- "):
-            next_container = []
-        else:
-            next_container = {}
-        parent[key] = next_container
-        stack.append((indent, next_container))
-
-    return result
-
-
-def _next_nested_yaml_line(
-    lines: list[tuple[int, str, str]],
-    index: int,
-    indent: int,
-) -> tuple[int, str, str] | None:
-    for next_line in lines[index + 1 :]:
-        if next_line[0] <= indent:
-            return None
-        return next_line
-    return None
-
-
-def _parse_scalar(value: str) -> str | int | float | bool | None:
-    if value in {"null", "None", "~"}:
-        return None
-    if value in {"true", "false"}:
-        return value == "true"
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        return value.strip("\"'")

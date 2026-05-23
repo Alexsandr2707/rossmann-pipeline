@@ -53,17 +53,18 @@ def main() -> int:
             if not args.file:
                 print("Inference mode requires -file.", file=sys.stderr)
                 return 2
-            pipeline.inference(Path(args.file))
+            print(pipeline.inference(Path(args.file)))
         elif args.mode == "update":
-            pipeline.update()
+            print(bool(pipeline.update()))
         elif args.mode == "pretrain":
-            pipeline.pretrain()
+            print(pipeline.pretrain())
         elif args.mode == "reset":
-            pipeline.reset()
+            print(pipeline.reset())
         elif args.mode == "evaluate":
-            pipeline.evaluate()
+            print(pipeline.evaluate())
         else:
-            pipeline.summary()
+            report_path = pipeline.summary()
+            print(report_path)
             dashboard_path = config.paths.reports_dir / "index.html"
             if args.open:
                 open_report(dashboard_path)

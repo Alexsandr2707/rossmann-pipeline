@@ -14,6 +14,7 @@ class Pipeline:
         self.logger = logging.getLogger(self.__class__.__name__)
         self._ensure_directories()
         self.collector = None
+        self.data_quality_analyzer = None
         self.model_trainer = None
         self.offline_evaluator = None
 
@@ -39,9 +40,13 @@ class Pipeline:
 
         batch_path, metadata = collected
         self.logger.info("Stream batch metadata: %s", metadata)
-        processed_dataset = DataPreprocessor(self.config).transform(
-            self._read_batch(batch_path)
+        raw_batch = self._read_batch(batch_path)
+        quality_metrics = self._get_data_quality_analyzer().analyze_batch(
+            raw_batch,
+            metadata,
         )
+        self.logger.info("Data quality metrics: %s", quality_metrics)
+        processed_dataset = DataPreprocessor(self.config).transform(raw_batch)
         processed_path = (
             self.config.paths.processed_data_dir
             / f"batch_{int(metadata['stream_batch_index']):04d}_processed.csv"
@@ -65,10 +70,9 @@ class Pipeline:
         validation = collector.validate_source_dataset()
         self.logger.info("Source dataset validation: %s", validation)
 
-        from app.dataset_loading import load_source_dataset
         from app.preprocessing import DataPreprocessor
 
-        raw_dataset = collector._sort_raw_dataset(load_source_dataset(self.config))
+        raw_dataset = collector.load_sorted_source_dataset()
         if raw_dataset.empty:
             raise ValueError("No rows available for pretraining.")
 
@@ -110,9 +114,11 @@ class Pipeline:
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)
-        raise NotImplementedError(
-            "Inference pipeline will be implemented after model training."
-        )
+        from app.prediction_serving import PredictionServing
+
+        output_path = PredictionServing(self.config).predict_file(input_path)
+        self.logger.info("Inference completed: predictions saved to %s", output_path)
+        return output_path
 
     def summary(self) -> Path:
         self.logger.info("Summary mode requested")
@@ -151,6 +157,7 @@ class Pipeline:
             "history_files": [
                 self.config.paths.collector_state_path,
                 self.config.paths.batch_metadata_path,
+                self.config.paths.data_quality_history_path,
                 self.config.paths.model_metrics_history_path,
             ],
         }
@@ -237,6 +244,13 @@ class Pipeline:
 
             self.collector = DataCollector(self.config)
         return self.collector
+
+    def _get_data_quality_analyzer(self):
+        if self.data_quality_analyzer is None:
+            from app.data_quality import DataQualityAnalyzer
+
+            self.data_quality_analyzer = DataQualityAnalyzer(self.config)
+        return self.data_quality_analyzer
 
     def _get_model_trainer(self):
         if self.model_trainer is None:

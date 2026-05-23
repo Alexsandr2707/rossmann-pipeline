@@ -22,13 +22,23 @@ class DataPreprocessor:
         transformed = self._transform_target_column(transformed)
         transformed = self._apply_schema_types(transformed)
         transformed = self._drop_leakage_columns(transformed)
+        transformed = self._sort_for_training(transformed)
+        return transformed
+
+    def transform_features(self, dataset: pd.DataFrame) -> pd.DataFrame:
+        transformed = dataset.copy()
+        transformed = self._transform_time_column(transformed)
+        transformed = self._apply_schema_types(transformed)
+        transformed = self._drop_leakage_columns(transformed)
+        return transformed
+
+    def _sort_for_training(self, dataset: pd.DataFrame) -> pd.DataFrame:
         sort_columns = [
             column
             for column in (self.config.data.time_column, "_source_file")
-            if column in transformed.columns
+            if column in dataset.columns
         ]
-        transformed = transformed.sort_values(sort_columns).reset_index(drop=True)
-        return transformed
+        return dataset.sort_values(sort_columns).reset_index(drop=True)
 
     def _transform_time_column(self, dataset: pd.DataFrame) -> pd.DataFrame:
         time_column = self.config.data.time_column
