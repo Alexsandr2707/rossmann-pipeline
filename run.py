@@ -21,6 +21,12 @@ def parse_args() -> argparse.Namespace:
         help="Input file for inference mode.",
     )
     parser.add_argument(
+        "update_count",
+        nargs="?",
+        type=int,
+        help="Number of update executions for update mode.",
+    )
+    parser.add_argument(
         "-config",
         default="config/config.yaml",
         help="Path to YAML configuration file.",
@@ -37,6 +43,12 @@ def main() -> int:
     args = parse_args()
     if args.open and args.mode != "summary":
         print("-open can only be used with -mode summary.", file=sys.stderr)
+        return 2
+    if args.update_count is not None and args.mode != "update":
+        print("Update count can only be used with -mode update.", file=sys.stderr)
+        return 2
+    if args.update_count is not None and args.update_count < 1:
+        print("Update count must be a positive integer.", file=sys.stderr)
         return 2
 
     from app.config import load_config
@@ -55,7 +67,13 @@ def main() -> int:
                 return 2
             print(pipeline.inference(Path(args.file)))
         elif args.mode == "update":
-            print(bool(pipeline.update()))
+            update_count = args.update_count or 1
+            for _ in range(update_count):
+                updated = bool(pipeline.update())
+                print(updated)
+                if not updated:
+                    break
+            print(pipeline.summary())
         elif args.mode == "pretrain":
             print(pipeline.pretrain())
         elif args.mode == "reset":

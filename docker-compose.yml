@@ -21,7 +21,12 @@ services:
   pipeline:
     <<: *pipeline-service
     command: ["-mode", "summary"]
-
+  update:
+    <<: *pipeline-service
+    command: ["-mode", "update"]
+  reset:
+    <<: *pipeline-service
+    command: ["-mode", "reset"]
   summary:
     <<: *pipeline-service
     command: ["-mode", "summary"]

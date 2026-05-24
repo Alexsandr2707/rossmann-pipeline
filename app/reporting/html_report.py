@@ -9,6 +9,7 @@ from jinja2 import Environment, select_autoescape
 from markupsafe import Markup
 
 from app.config import Config
+from app.reporting.prediction_history import generate_update_prediction_timeline
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -159,6 +160,25 @@ HTML_TEMPLATE = """<!doctype html>
   </section>
 
   <section>
+    <h2>Model interpretation</h2>
+    <div class="cards">
+      {% for card in interpretation_cards %}
+      <div class="card">{{ card.title }}<b>{{ card.value }}</b></div>
+      {% endfor %}
+    </div>
+    <div class="links">
+      {% for link in interpretation_links %}
+        {% if link.href %}
+        <a href="{{ link.href }}">{{ link.label }}</a>
+        {% else %}
+        <span class="missing">{{ link.label }}</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {{ interpretation_table }}
+  </section>
+
+  <section>
     <h2>Performance history</h2>
     <div class="cards">
       {% for card in performance_cards %}
@@ -229,10 +249,15 @@ def generate_html_report(config: Config) -> Path:
     data_quality_rows = read_csv(config.paths.data_quality_history_path)
     metric_rows = read_csv(config.paths.model_metrics_history_path)
     performance_rows = read_csv(config.paths.performance_history_path)
+    update_prediction_timeline_path = generate_update_prediction_timeline(config)
     latest_batch = batch_rows[-1] if batch_rows else {}
     latest_quality = data_quality_rows[-1] if data_quality_rows else {}
     latest_metrics = metric_rows[-1] if metric_rows else {}
     latest_performance = performance_rows[-1] if performance_rows else {}
+    interpretation_report_path = reports_dir / "model_interpretation_latest.md"
+    top_features_value = latest_metrics.get("interpretation_top_features_path", "")
+    top_features_path = Path(top_features_value) if top_features_value else None
+    top_feature_rows = read_csv(top_features_path) if top_features_path else []
     selected_model = config.model.selected_model
     selected_model_params = config.model.model_parameters.get(selected_model, {})
     base_hyperparameters_table = table(
@@ -323,6 +348,11 @@ def generate_html_report(config: Config) -> Path:
         history_charts=[
             image(
                 reports_dir,
+                update_prediction_timeline_path
+                or reports_dir / "figures/history/update_prediction_timeline.svg",
+            ),
+            image(
+                reports_dir,
                 reports_dir / "figures/history/model_metrics_history_rmse.svg",
             ),
             image(
@@ -341,6 +371,35 @@ def generate_html_report(config: Config) -> Path:
         metric_table=table(metric_rows[-8:])
         if metric_rows
         else Markup("<p>No metric history yet.</p>"),
+        interpretation_cards=[
+            card("Model", latest_metrics.get("model_name", config.model.selected_model)),
+            card("Batch", latest_metrics.get("batch_index", "not ready")),
+            card("Period", latest_metrics.get("period_type", "not ready")),
+            card(
+                "Features",
+                str(len(top_feature_rows)) if top_feature_rows else "not ready",
+            ),
+        ],
+        interpretation_links=[
+            link(
+                reports_dir,
+                interpretation_report_path,
+                missing_label="model_interpretation_latest.md is missing",
+            ),
+            link(
+                reports_dir,
+                top_features_path,
+                missing_label="top features CSV is missing",
+            )
+            if top_features_path
+            else {"href": "", "label": "top features CSV is missing"},
+        ],
+        interpretation_table=table(
+            top_feature_rows[:20],
+            ["feature", "value", "abs_value"],
+        )
+        if top_feature_rows
+        else Markup("<p>No model interpretation table yet.</p>"),
         performance_cards=[
             card("Operation", latest_performance.get("operation", "not ready")),
             card("Status", latest_performance.get("status", "not ready")),

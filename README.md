@@ -72,6 +72,7 @@ Leakage rule: `Customers` is never used as a feature.
 
 ```bash
 python run.py -mode update
+python run.py -mode update 3
 python run.py -mode pretrain
 python run.py -mode evaluate
 python run.py -mode inference -file data/external/test.csv
@@ -102,11 +103,17 @@ Evaluation outputs:
 `reports/index.html`. Use `python run.py -mode summary -open` to generate it
 and open it with the default browser.
 Summary outputs include recent performance records (`inference`/`update`) and
-the active model hyperparameters from config.
+the active model hyperparameters from config. After stream updates are available,
+the report also includes an update-period prediction timeline that aggregates
+daily actual sales and model predictions from all update batches.
 
 CLI commands print their primary result to stdout: `update` prints `True` or
-`False`, `inference` prints the prediction CSV path, and `summary` prints the
-Markdown report path.
+`False` for each executed update and then prints the refreshed Markdown report
+path, `inference` prints the prediction CSV path, and `summary` prints the
+Markdown report path. Use `python run.py -mode update 3` to process up to three
+stream batches in sequence; execution stops early if no new batch is available.
+After update mode finishes, the Markdown report and HTML dashboard are
+regenerated automatically.
 
 ## Training
 

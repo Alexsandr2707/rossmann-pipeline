@@ -86,7 +86,9 @@ class ModelInterpretationWriter:
         values = np.asarray(names).astype(str).tolist()
         return [value for value in values if value]
 
-    def _importance_values(self, estimator: Any) -> tuple[str | None, np.ndarray | None]:
+    def _importance_values(
+        self, estimator: Any
+    ) -> tuple[str | None, np.ndarray | None]:
         if estimator is None:
             return None, None
         if hasattr(estimator, "feature_importances_"):

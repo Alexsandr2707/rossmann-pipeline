@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from app.config import Config
+from app.reporting.prediction_history import generate_update_prediction_timeline
 
 DEFAULT_TAIL_ROWS = 5
 SUMMARY_DIR_NAME = "summary"
@@ -22,6 +23,7 @@ def generate_summary_report(config: Config) -> Path:
     data_quality_history = _read_history(config.paths.data_quality_history_path)
     model_history = _read_history(config.paths.model_metrics_history_path)
     performance_history = _read_history(config.paths.performance_history_path)
+    update_prediction_timeline_path = generate_update_prediction_timeline(config)
 
     lines: list[str] = [
         "# Pipeline summary",
@@ -34,8 +36,17 @@ def generate_summary_report(config: Config) -> Path:
     lines.extend(_latest_data_quality_section(data_quality_history, report_path.parent))
     lines.extend(["", "## Performance history", ""])
     lines.extend(_performance_section(performance_history, report_path.parent))
+    lines.extend(["", "## Update prediction timeline", ""])
+    lines.extend(
+        _update_prediction_timeline_section(
+            update_prediction_timeline_path,
+            report_path.parent,
+        )
+    )
     lines.extend(["", "## Model metrics trend", ""])
     lines.extend(_model_metrics_trend_section(model_history, report_path.parent))
+    lines.extend(["", "## Model interpretation", ""])
+    lines.extend(_model_interpretation_section(config, report_path.parent))
     lines.extend(["", "## Model hyperparameters", ""])
     lines.extend(_hyperparameters_section(config))
     lines.extend(["", "## Source artifacts", ""])
@@ -193,6 +204,52 @@ def _latest_data_quality_section(
     )
     if table is not None:
         lines.extend(["", table])
+    return lines
+
+
+def _update_prediction_timeline_section(
+    timeline_path: Path | None,
+    report_dir: Path,
+) -> list[str]:
+    if timeline_path is None or not timeline_path.exists():
+        return [
+            "No update prediction timeline is available yet.",
+            "",
+            "Run update mode to write stream prediction CSV files.",
+        ]
+    relative_path = _relative_path(report_dir, timeline_path)
+    return [
+        "Daily actual sales and model predictions aggregated from all stream updates.",
+        "",
+        f"![Update prediction timeline]({relative_path})",
+    ]
+
+
+def _model_interpretation_section(config: Config, report_dir: Path) -> list[str]:
+    interpretation_path = config.paths.reports_dir / "model_interpretation_latest.md"
+    if not interpretation_path.exists():
+        return [
+            "No model interpretation report is available yet.",
+            "",
+            f"- Expected file: `{_relative_path(report_dir, interpretation_path)}`",
+        ]
+
+    try:
+        content = interpretation_path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        return [f"Could not read model interpretation report: {error}"]
+
+    lines = [
+        f"- Source file: `{_relative_path(report_dir, interpretation_path)}`",
+        "",
+    ]
+    for line in content:
+        if line.startswith("# "):
+            lines.append(f"### {line[2:]}")
+        elif line.startswith("## "):
+            lines.append(f"### {line[3:]}")
+        else:
+            lines.append(line)
     return lines
 
 
