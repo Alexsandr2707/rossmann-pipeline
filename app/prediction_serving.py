@@ -10,36 +10,66 @@ import pandas as pd
 from app.config import Config
 from app.dataset_loading import merge_store_metadata
 from app.feature_engineering import build_features
+from app.performance_monitoring import PerformanceMonitor, PerformanceRecord
 from app.preprocessing import DataPreprocessor
 
 
 class PredictionServing:
     def __init__(self, config: Config) -> None:
         self.config = config
+        self.performance_monitor = PerformanceMonitor(config)
 
     def predict_file(self, input_path: Path) -> Path:
-        if not input_path.exists():
-            raise FileNotFoundError(f"Inference input not found: {input_path}")
+        start_time = self.performance_monitor.start()
+        input_rows = 0
+        output_path: Path | None = None
+        status = "failure"
+        error_message: str | None = None
+        try:
+            if not input_path.exists():
+                raise FileNotFoundError(f"Inference input not found: {input_path}")
 
-        raw_input = pd.read_csv(input_path, low_memory=False)
-        serving_dataset = self._prepare_raw_dataset(raw_input, input_path)
-        processed = DataPreprocessor(self.config).transform_features(serving_dataset)
-        if len(processed) != len(raw_input):
-            raise ValueError(
-                "Inference preprocessing changed row count: "
-                f"input_rows={len(raw_input)} processed_rows={len(processed)}"
+            raw_input = pd.read_csv(input_path, low_memory=False)
+            input_rows = int(len(raw_input))
+            serving_dataset = self._prepare_raw_dataset(raw_input, input_path)
+            processed = DataPreprocessor(self.config).transform_features(serving_dataset)
+            if len(processed) != len(raw_input):
+                raise ValueError(
+                    "Inference preprocessing changed row count: "
+                    f"input_rows={len(raw_input)} processed_rows={len(processed)}"
+                )
+
+            features = build_features(processed, self.config)
+            model = self._load_model()
+            predictions = model.predict(features)
+
+            output = raw_input.copy()
+            output["predict"] = predictions
+            output_path = self._next_output_path()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output.to_csv(output_path, index=False)
+            status = "success"
+            return output_path
+        except Exception as error:
+            error_message = str(error)
+            raise
+        finally:
+            self.performance_monitor.record(
+                PerformanceRecord(
+                    operation="inference",
+                    status=status,
+                    duration_seconds=0.0,
+                    input_rows=input_rows or None,
+                    output_rows=input_rows if status == "success" else None,
+                    model_name=self.config.model.selected_model,
+                    model_path=str(self.config.paths.best_model_path),
+                    input_path=str(input_path),
+                    output_path=str(output_path) if output_path else "",
+                    artifact_path=str(output_path) if output_path else "",
+                    error_message=error_message,
+                ),
+                start_time=start_time,
             )
-
-        features = build_features(processed, self.config)
-        model = self._load_model()
-        predictions = model.predict(features)
-
-        output = raw_input.copy()
-        output["predict"] = predictions
-        output_path = self._next_output_path()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output.to_csv(output_path, index=False)
-        return output_path
 
     def _prepare_raw_dataset(
         self,

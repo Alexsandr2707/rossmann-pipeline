@@ -18,6 +18,7 @@ from scipy.stats import pearsonr
 from app.config import Config
 from app.feature_engineering import build_features_and_target
 from app.model_diagnostics import ModelDiagnosticsWriter
+from app.model_interpretation import ModelInterpretationWriter
 from app.models import (
     FEATURE_PREPROCESSING_VERSION,
     SGD_REGRESSION_MODEL_NAME,
@@ -41,6 +42,7 @@ class ModelTrainer:
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
         self.diagnostics = ModelDiagnosticsWriter(config)
+        self.interpretation = ModelInterpretationWriter(config)
 
     @property
     def metrics_history_path(self) -> Path:
@@ -149,6 +151,13 @@ class ModelTrainer:
                     timeline_dates=valid_dates,
                 )
             )
+            metrics.update(
+                self.interpretation.write_model_interpretation(
+                    metrics,
+                    preprocessor=pipeline.named_steps["preprocessor"],
+                    estimator=pipeline.named_steps["model"],
+                )
+            )
             results.append(metrics)
             start_features, start_target = self._build_features_and_target(
                 start_dataset
@@ -240,6 +249,13 @@ class ModelTrainer:
                 estimator=pipeline.named_steps["model"],
                 transformed_features=transformed_features,
                 timeline_dates=dates,
+            )
+        )
+        metrics.update(
+            self.interpretation.write_model_interpretation(
+                metrics,
+                preprocessor=pipeline.named_steps["preprocessor"],
+                estimator=pipeline.named_steps["model"],
             )
         )
 
@@ -618,6 +634,10 @@ class ModelTrainer:
             "diagnostics_report_path",
             "archive_diagnostics_report_path",
             "latest_diagnostics_report_path",
+            "interpretation_report_path",
+            "archive_interpretation_report_path",
+            "latest_interpretation_report_path",
+            "interpretation_top_features_path",
             "predictions_path",
             "actual_vs_prediction_plot_path",
             "latest_actual_vs_prediction_plot_path",

@@ -54,6 +54,7 @@ class PathConfig:
     collector_state_path: Path
     batch_metadata_path: Path
     data_quality_history_path: Path
+    performance_history_path: Path
     model_metrics_history_path: Path
     best_model_path: Path
     pipeline_log_path: Path
@@ -157,6 +158,12 @@ def load_config(path: str | Path) -> Config:
                 paths.get(
                     "data_quality_history_path",
                     "artifacts/data_quality_history.csv",
+                )
+            ),
+            performance_history_path=_path(
+                paths.get(
+                    "performance_history_path",
+                    "artifacts/performance_history.csv",
                 )
             ),
             model_metrics_history_path=_path(paths["model_metrics_history_path"]),

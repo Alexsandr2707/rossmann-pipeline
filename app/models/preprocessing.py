@@ -39,7 +39,11 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         return np.column_stack(encoded_columns)
 
     def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
-        return np.asarray([f"{column}_frequency" for column in self.feature_names_in_])
+        if input_features is None:
+            columns = self.feature_names_in_
+        else:
+            columns = np.asarray(input_features).astype(str).tolist()
+        return np.asarray([f"{column}_frequency" for column in columns])
 
     def _to_frame(self, x: Any) -> pd.DataFrame:
         if isinstance(x, pd.DataFrame):

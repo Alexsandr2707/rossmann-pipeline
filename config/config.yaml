@@ -56,6 +56,7 @@ paths:
   collector_state_path: artifacts/collector_state.json
   batch_metadata_path: artifacts/batch_metadata_history.csv
   data_quality_history_path: artifacts/data_quality_history.csv
+  performance_history_path: artifacts/performance_history.csv
   model_metrics_history_path: artifacts/model_metrics_history.csv
   best_model_path: models/best_model.pkl
   pipeline_log_path: logs/pipeline.log

@@ -63,6 +63,8 @@ Evaluation outputs:
 `summary` writes both the Markdown summary and a browser-friendly dashboard at
 `reports/index.html`. Use `python run.py -mode summary -open` to generate it
 and open it with the default browser.
+Summary outputs include recent performance records (`inference`/`update`) and
+the active model hyperparameters from config.
 
 CLI commands print their primary result to stdout: `update` prints `True` or
 `False`, `inference` prints the prediction CSV path, and `summary` prints the
@@ -104,6 +106,7 @@ Runtime `update` mode emulates streaming by writing the next
 - `artifacts/collector_state.json`
 - `artifacts/batch_metadata_history.csv`
 - `artifacts/data_quality_history.csv`
+- `artifacts/performance_history.csv`
 - `artifacts/model_metrics_history.csv`
 - `reports/eda_batch_XXXX.md`
 - `models/model_vXXXX_<model_name>.pkl`
@@ -118,6 +121,8 @@ Regression metrics include `rmse`, `mae`, `r2`, `smape`, `pearson_corr` and
 Data Quality metrics include missingness, duplicate rows, constant columns,
 schema drift, IQR outlier share and categorical cardinality. Summary reports
 read these metrics from `artifacts/data_quality_history.csv`.
+Performance monitoring writes operation duration/status metadata to
+`artifacts/performance_history.csv`, and summary reports display recent rows.
 
 `reset` removes generated runtime artifacts and keeps source CSV files, config,
 code and `.gitkeep` files.

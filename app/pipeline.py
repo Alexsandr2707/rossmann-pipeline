@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from app.config import Config
+from app.performance_monitoring import PerformanceMonitor, PerformanceRecord
 from app.reporting import generate_html_report, generate_summary_report
 
 
@@ -17,52 +18,83 @@ class Pipeline:
         self.data_quality_analyzer = None
         self.model_trainer = None
         self.offline_evaluator = None
+        self.performance_monitor = PerformanceMonitor(config)
 
     def update(self) -> int:
         self.logger.info("Update mode requested")
+        start_time = self.performance_monitor.start()
+        processed_rows = 0
+        model_path: Path | None = None
+        artifact_path: Path | None = None
+        model_name = self.config.model.selected_model
+        status = "failure"
+        error_message: str | None = None
         collector = self._get_collector()
-        validation = collector.validate_source_dataset()
-        self.logger.info("Source dataset validation: %s", validation)
+        try:
+            validation = collector.validate_source_dataset()
+            self.logger.info("Source dataset validation: %s", validation)
 
-        model_trainer = self._get_model_trainer()
-        if not model_trainer.current_model_path.exists():
-            self.logger.info(
-                "Current model is missing. Running pretrain before stream update."
+            model_trainer = self._get_model_trainer()
+            if not model_trainer.current_model_path.exists():
+                self.logger.info(
+                    "Current model is missing. Running pretrain before stream update."
+                )
+                self.pretrain()
+
+            collected = collector.collect_next_stream_batch()
+            if collected is None:
+                status = "success"
+                self.logger.info("Update completed: no new batches were available.")
+                return 0
+
+            from app.preprocessing import DataPreprocessor
+
+            batch_path, metadata = collected
+            artifact_path = batch_path
+            self.logger.info("Stream batch metadata: %s", metadata)
+            raw_batch = self._read_batch(batch_path)
+            quality_metrics = self._get_data_quality_analyzer().analyze_batch(
+                raw_batch,
+                metadata,
             )
-            self.pretrain()
+            self.logger.info("Data quality metrics: %s", quality_metrics)
+            processed_dataset = DataPreprocessor(self.config).transform(raw_batch)
+            processed_rows = int(len(processed_dataset))
+            processed_path = (
+                self.config.paths.processed_data_dir
+                / f"batch_{int(metadata['stream_batch_index']):04d}_processed.csv"
+            )
+            processed_path.parent.mkdir(parents=True, exist_ok=True)
+            processed_dataset.to_csv(processed_path, index=False)
 
-        collected = collector.collect_next_stream_batch()
-        if collected is None:
-            self.logger.info("Update completed: no new batches were available.")
-            return 0
-
-        from app.preprocessing import DataPreprocessor
-
-        batch_path, metadata = collected
-        self.logger.info("Stream batch metadata: %s", metadata)
-        raw_batch = self._read_batch(batch_path)
-        quality_metrics = self._get_data_quality_analyzer().analyze_batch(
-            raw_batch,
-            metadata,
-        )
-        self.logger.info("Data quality metrics: %s", quality_metrics)
-        processed_dataset = DataPreprocessor(self.config).transform(raw_batch)
-        processed_path = (
-            self.config.paths.processed_data_dir
-            / f"batch_{int(metadata['stream_batch_index']):04d}_processed.csv"
-        )
-        processed_path.parent.mkdir(parents=True, exist_ok=True)
-        processed_dataset.to_csv(processed_path, index=False)
-
-        model_path, model_metrics = model_trainer.update_on_stream_batch(
-            latest_processed_path=processed_path,
-            raw_batch_path=batch_path,
-            batch_metadata=metadata,
-        )
-        self.logger.info("Updated model saved to %s", model_path)
-        self.logger.info("Stream update metrics: %s", model_metrics)
-        self.logger.info("Update completed: processed 1 stream batch.")
-        return 1
+            model_path, model_metrics = model_trainer.update_on_stream_batch(
+                latest_processed_path=processed_path,
+                raw_batch_path=batch_path,
+                batch_metadata=metadata,
+            )
+            status = "success"
+            self.logger.info("Updated model saved to %s", model_path)
+            self.logger.info("Stream update metrics: %s", model_metrics)
+            self.logger.info("Update completed: processed 1 stream batch.")
+            return 1
+        except Exception as error:
+            error_message = str(error)
+            raise
+        finally:
+            self.performance_monitor.record(
+                PerformanceRecord(
+                    operation="update",
+                    status=status,
+                    duration_seconds=0.0,
+                    input_rows=processed_rows or None,
+                    output_rows=processed_rows or None,
+                    model_name=model_name,
+                    model_path=str(model_path) if model_path else "",
+                    artifact_path=str(artifact_path) if artifact_path else "",
+                    error_message=error_message,
+                ),
+                start_time=start_time,
+            )
 
     def pretrain(self) -> Path:
         self.logger.info("Pretrain mode requested")
@@ -158,6 +190,7 @@ class Pipeline:
                 self.config.paths.collector_state_path,
                 self.config.paths.batch_metadata_path,
                 self.config.paths.data_quality_history_path,
+                self.config.paths.performance_history_path,
                 self.config.paths.model_metrics_history_path,
             ],
         }

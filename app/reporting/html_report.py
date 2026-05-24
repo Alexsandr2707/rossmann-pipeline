@@ -159,6 +159,21 @@ HTML_TEMPLATE = """<!doctype html>
   </section>
 
   <section>
+    <h2>Performance history</h2>
+    <div class="cards">
+      {% for card in performance_cards %}
+      <div class="card">{{ card.title }}<b>{{ card.value }}</b></div>
+      {% endfor %}
+    </div>
+    {{ performance_table }}
+  </section>
+
+  <section>
+    <h2>Model hyperparameters</h2>
+    {{ hyperparameters_table }}
+  </section>
+
+  <section>
     <h2>Offline evaluation</h2>
     <div class="charts">
       {% for chart in offline_charts %}
@@ -213,9 +228,40 @@ def generate_html_report(config: Config) -> Path:
     batch_rows = read_csv(config.paths.batch_metadata_path)
     data_quality_rows = read_csv(config.paths.data_quality_history_path)
     metric_rows = read_csv(config.paths.model_metrics_history_path)
+    performance_rows = read_csv(config.paths.performance_history_path)
     latest_batch = batch_rows[-1] if batch_rows else {}
     latest_quality = data_quality_rows[-1] if data_quality_rows else {}
     latest_metrics = metric_rows[-1] if metric_rows else {}
+    latest_performance = performance_rows[-1] if performance_rows else {}
+    selected_model = config.model.selected_model
+    selected_model_params = config.model.model_parameters.get(selected_model, {})
+    base_hyperparameters_table = table(
+        [
+            {
+                "selected_model": selected_model,
+                "training_mode": config.model.training_mode,
+                "update_strategy": config.model.update_strategy,
+                "primary_metric": config.model.primary_metric,
+            }
+        ],
+        [
+            "selected_model",
+            "training_mode",
+            "update_strategy",
+            "primary_metric",
+        ],
+    )
+    explicit_params_table = (
+        table(
+            [
+                {"parameter": key, "value": str(value)}
+                for key, value in sorted(selected_model_params.items())
+            ],
+            ["parameter", "value"],
+        )
+        if selected_model_params
+        else Markup("<p>No explicit parameters for selected model.</p>")
+    )
     html_text = _JINJA_ENV.from_string(HTML_TEMPLATE).render(
         project_name=config.project.name,
         overview_cards=[
@@ -295,6 +341,33 @@ def generate_html_report(config: Config) -> Path:
         metric_table=table(metric_rows[-8:])
         if metric_rows
         else Markup("<p>No metric history yet.</p>"),
+        performance_cards=[
+            card("Operation", latest_performance.get("operation", "not ready")),
+            card("Status", latest_performance.get("status", "not ready")),
+            card(
+                "Duration sec",
+                latest_performance.get("duration_seconds", "not ready"),
+            ),
+            card("Input rows", latest_performance.get("input_rows", "not ready")),
+            card("Output rows", latest_performance.get("output_rows", "not ready")),
+        ],
+        performance_table=table(
+            performance_rows[-8:],
+            [
+                "timestamp",
+                "operation",
+                "status",
+                "duration_seconds",
+                "input_rows",
+                "output_rows",
+                "model_name",
+                "output_path",
+                "error_message",
+            ],
+        )
+        if performance_rows
+        else Markup("<p>No performance history yet.</p>"),
+        hyperparameters_table=base_hyperparameters_table + explicit_params_table,
         offline_charts=[
             image(
                 reports_dir,
@@ -309,8 +382,10 @@ def generate_html_report(config: Config) -> Path:
         file_links=[
             link(reports_dir, reports_dir / "summary/summary_latest.md"),
             link(reports_dir, reports_dir / "model_diagnostics_latest.md"),
+            link(reports_dir, reports_dir / "model_interpretation_latest.md"),
             link(reports_dir, config.paths.batch_metadata_path),
             link(reports_dir, config.paths.data_quality_history_path),
+            link(reports_dir, config.paths.performance_history_path),
             link(reports_dir, config.paths.model_metrics_history_path),
         ],
     )

@@ -21,6 +21,7 @@ def generate_summary_report(config: Config) -> Path:
     batch_history = _read_history(config.paths.batch_metadata_path)
     data_quality_history = _read_history(config.paths.data_quality_history_path)
     model_history = _read_history(config.paths.model_metrics_history_path)
+    performance_history = _read_history(config.paths.performance_history_path)
 
     lines: list[str] = [
         "# Pipeline summary",
@@ -31,8 +32,12 @@ def generate_summary_report(config: Config) -> Path:
     lines.extend(_latest_batch_section(batch_history, report_path.parent))
     lines.extend(["", "## Latest data quality metrics", ""])
     lines.extend(_latest_data_quality_section(data_quality_history, report_path.parent))
+    lines.extend(["", "## Performance history", ""])
+    lines.extend(_performance_section(performance_history, report_path.parent))
     lines.extend(["", "## Model metrics trend", ""])
     lines.extend(_model_metrics_trend_section(model_history, report_path.parent))
+    lines.extend(["", "## Model hyperparameters", ""])
+    lines.extend(_hyperparameters_section(config))
     lines.extend(["", "## Source artifacts", ""])
     lines.extend(_artifact_links(config, report_path.parent))
 
@@ -127,6 +132,12 @@ def _model_metrics_trend_section(
     for field in ("rmse", "mae", "r2", "smape", "pearson_corr"):
         if field in latest:
             lines.append(f"- Latest {field}: {_format_value(latest[field])}")
+    interpretation_report_path = latest.get("latest_interpretation_report_path", "")
+    if interpretation_report_path:
+        lines.append(
+            "- Latest interpretation report: "
+            f"`{_relative_path(report_dir, Path(interpretation_report_path))}`"
+        )
     lines.extend(["", table])
     return lines
 
@@ -189,6 +200,7 @@ def _artifact_links(config: Config, report_dir: Path) -> list[str]:
     artifact_paths = [
         config.paths.batch_metadata_path,
         config.paths.data_quality_history_path,
+        config.paths.performance_history_path,
         config.paths.model_metrics_history_path,
     ]
     lines: list[str] = []
@@ -200,6 +212,7 @@ def _artifact_links(config: Config, report_dir: Path) -> list[str]:
             lines.append(f"- {artifact_path.name}: `{relative}` (missing)")
     latest_reports = [
         report_dir.parent / "model_diagnostics_latest.md",
+        report_dir.parent / "model_interpretation_latest.md",
     ]
     for report_path in latest_reports:
         relative = _relative_path(report_dir, report_path)
@@ -207,6 +220,60 @@ def _artifact_links(config: Config, report_dir: Path) -> list[str]:
             lines.append(f"- [{report_path.name}]({relative})")
         else:
             lines.append(f"- {report_path.name}: `{relative}` (missing)")
+    return lines
+
+
+def _performance_section(
+    history: list[dict[str, str]] | None,
+    report_dir: Path,
+) -> list[str]:
+    if history is None:
+        return [
+            "No performance history is available yet.",
+            "",
+            f"- Expected file: `{_relative_path(report_dir, Path('artifacts/performance_history.csv'))}`",
+        ]
+
+    lines = [f"- Entries available: {len(history)}"]
+    latest = history[-1]
+    for field in ("operation", "status", "duration_seconds", "timestamp"):
+        if field in latest:
+            lines.append(f"- Latest {field}: {_format_value(latest[field])}")
+    table = _tail_markdown_table(
+        history,
+        [
+            "timestamp",
+            "operation",
+            "status",
+            "duration_seconds",
+            "input_rows",
+            "output_rows",
+            "model_name",
+            "output_path",
+            "error_message",
+        ],
+        tail_rows=DEFAULT_TAIL_ROWS,
+    )
+    if table is not None:
+        lines.extend(["", table])
+    return lines
+
+
+def _hyperparameters_section(config: Config) -> list[str]:
+    selected_model = config.model.selected_model
+    params = config.model.model_parameters.get(selected_model, {})
+    lines = [
+        f"- selected_model: {selected_model}",
+        f"- training_mode: {config.model.training_mode}",
+        f"- update_strategy: {config.model.update_strategy}",
+        f"- primary_metric: {config.model.primary_metric}",
+        f"- model_parameters[{selected_model}]:",
+    ]
+    if not params:
+        lines.append("  - (empty)")
+        return lines
+    for key, value in sorted(params.items()):
+        lines.append(f"  - {key}: {_format_value(value)}")
     return lines
 
 
