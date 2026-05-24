@@ -11,6 +11,44 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Docker CI/CD
+
+The Docker setup keeps source data, models and generated runtime outputs outside
+the image. They are mounted from the local working tree into the container:
+
+- `data/`
+- `models/`
+- `artifacts/`
+- `reports/`
+- `logs/`
+
+Build the local image:
+
+```bash
+docker compose build
+```
+
+Run the CI test command inside Docker:
+
+```bash
+docker compose run --rm ci
+```
+
+Run pipeline commands through the Docker image:
+
+```bash
+docker compose run --rm pipeline -mode pretrain
+docker compose run --rm pipeline -mode update
+docker compose run --rm pipeline -mode evaluate
+docker compose run --rm pipeline -mode inference -file data/external/test.csv
+docker compose run --rm summary
+```
+
+This Compose workflow is the first CD stage: after tests pass, run the desired
+pipeline mode in the same image and persist outputs through mounted directories.
+A future GitHub Actions workflow can reuse the same `docker compose build` and
+`docker compose run --rm ci` commands.
+
 ## Data
 
 Expected files:

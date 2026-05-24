@@ -1,0 +1,27 @@
+x-pipeline-service: &pipeline-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: rossmann-ml-pipeline:local
+  working_dir: /app
+  user: "${UID:-1000}:${GID:-1000}"
+  volumes:
+    - ./data:/app/data
+    - ./models:/app/models
+    - ./artifacts:/app/artifacts
+    - ./reports:/app/reports
+    - ./logs:/app/logs
+
+services:
+  ci:
+    <<: *pipeline-service
+    entrypoint: ["python", "-m", "unittest"]
+    command: ["discover", "-s", "tests", "-v"]
+
+  pipeline:
+    <<: *pipeline-service
+    command: ["-mode", "summary"]
+
+  summary:
+    <<: *pipeline-service
+    command: ["-mode", "summary"]
