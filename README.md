@@ -1,9 +1,9 @@
 # Rossmann Store Sales regression pipeline
 
-MVP MLOps pipeline for tabular regression on the Kaggle Rossmann Store Sales
-dataset.
+MVP MLOps-пайплайн для табличной регрессии на датасете Kaggle Rossmann Store
+Sales.
 
-## Setup
+## Установка
 
 ```bash
 python -m venv .venv
@@ -13,17 +13,18 @@ pip install -r requirements.txt
 
 ## Docker CI/CD
 
-This repository uses a Docker-only local CI/CD workflow for the current
-assignment. Compose defines repeatable services for tests, training, updates,
-evaluation, inference, summary generation and a small local CD sequence. GitHub
-Actions is intentionally not included in this variant, so CI/CD requirements
-that explicitly require GitHub Actions are not closed here and can be moved to a
-future workflow.
+В текущей версии проект использует локальный Docker-only CI/CD-процесс.
+`docker compose` описывает воспроизводимые сервисы для тестов, обучения,
+потоковых обновлений, offline evaluation, inference, генерации summary и
+короткой локальной CD-последовательности. GitHub Actions намеренно не добавлен
+в этот вариант, поэтому требования задания, которые явно требуют GitHub
+Actions, здесь не закрываются и могут быть перенесены в отдельный workflow
+позже.
 
-The image contains code, configuration and Python dependencies. Source data,
-trained models and generated runtime outputs stay outside the image because
-they are environment-specific, can be large, and must persist between container
-runs. Compose mounts them from the local working tree into the container:
+Docker-образ содержит код, конфигурацию и Python-зависимости. Исходные данные,
+обученные модели и runtime-результаты остаются вне образа: они зависят от
+окружения, могут быть большими и должны сохраняться между запусками
+контейнеров. Compose подключает их из локальной рабочей директории:
 
 - `data/`
 - `models/`
@@ -31,19 +32,19 @@ runs. Compose mounts them from the local working tree into the container:
 - `reports/`
 - `logs/`
 
-Build the local image when Docker image creation is allowed:
+Собрать локальный образ, когда скачивание Docker-образов разрешено:
 
 ```bash
 docker compose build
 ```
 
-Run the Docker CI test service:
+Запустить Docker CI-сервис с unit-тестами:
 
 ```bash
 docker compose run --rm ci
 ```
 
-Run pipeline stages through dedicated Compose services:
+Запустить этапы пайплайна через отдельные Compose-сервисы:
 
 ```bash
 docker compose run --rm pretrain
@@ -54,96 +55,99 @@ docker compose run --rm inference
 docker compose run --rm summary
 ```
 
-`pipeline` remains available as a generic entrypoint for custom CLI arguments:
+`pipeline` остается универсальной точкой входа для произвольных CLI-аргументов:
 
 ```bash
 docker compose run --rm pipeline -mode inference -file data/external/test.csv
 docker compose run --rm pipeline -mode update
+docker compose run --rm pipeline -mode update 3
 ```
 
-Run multiple update steps by starting the `update` or `pipeline -mode update`
-service repeatedly.
+Несколько потоковых update-шагов можно выполнить через
+`pipeline -mode update <count>` или повторным запуском сервиса `update`.
 
-The local CD service runs tests, pretraining and summary generation in order in
-the same Compose environment:
+Локальный CD-сервис последовательно запускает тесты, предварительное обучение и
+генерацию summary в одном Compose-окружении:
 
 ```bash
 docker compose run --rm local-cd
 ```
 
-The Docker-only workflow satisfies the local assignment evidence through these
-runtime artifacts:
+Docker-only процесс подтверждается следующими runtime-артефактами:
 
 - `logs/pipeline.log`
 - `models/*.pkl`
 - `artifacts/collector_state.json`
 - `artifacts/*history*.csv`
 - `reports/index.html`
+- `reports/summary/summary_latest.md`
 
-## Data
+## Данные
 
-Expected files:
+Ожидаемые исходные файлы:
 
 - `data/external/train.csv`
 - `data/external/store.csv`
-- `data/external/test.csv` for inference
+- `data/external/test.csv` для inference
+
+Опциональный справочный файл Kaggle:
+
 - `data/external/sample_submission.csv`
 
-The training source is `train.csv`. Before preprocessing, it is joined with
-`store.csv` by `Store` using a many-to-one left join. Offline evaluation does
-not read `test.csv`.
+Источник обучения - `train.csv`. Перед preprocessing он объединяется с
+`store.csv` по колонке `Store` через many-to-one left join. Offline evaluation
+не читает `test.csv`.
 
 Target: `Sales`.
 
-Time column: `Date`.
+Временная колонка: `Date`.
 
-Leakage rule: `Customers` is never used as a feature.
+Правило против leakage: `Customers` никогда не используется как feature.
 
-## Project architecture
+## Архитектура проекта
 
-The `app/` package is split by pipeline responsibility. The old flat module
-layout was hard to scan because data preparation, orchestration, training,
-serving and monitoring code lived at the same level. The new layout keeps
-modules close to the stage where they are used:
+Пакет `app/` разделен по ответственности этапов пайплайна. Новая структура
+держит модули рядом с тем этапом, где они используются:
 
 ```text
 app/
-  core/           # CLI-facing orchestration, config parsing and logging setup
-  data/           # source loading, stream batch collection, validation and features
-  models/         # model interfaces, sklearn implementations and preprocessing blocks
-  training/       # training/update workflow plus model diagnostics and interpretation
-  serving/        # inference-time prediction generation
-  evaluation/     # offline model evaluation workflow
-  monitoring/     # runtime operation metrics
-  reporting/      # Markdown/HTML reports and prediction history charts
-  visualization/  # reusable SVG chart writers
+  core/           # CLI-оркестрация, чтение config и настройка logging
+  data/           # загрузка данных, сбор stream batch-ей, validation и features
+  models/         # model interfaces, sklearn-реализации и preprocessing blocks
+  training/       # training/update workflow, diagnostics и interpretation
+  serving/        # генерация inference-прогнозов
+  evaluation/     # offline evaluation workflow
+  monitoring/     # runtime-метрики операций
+  reporting/      # Markdown/HTML-отчеты и prediction history charts
+  visualization/  # переиспользуемые SVG chart writers
 ```
 
-Grouping logic:
+Логика группировки:
 
-- `app/core/` contains project wiring: `config.py`, `logging_utils.py` and
-  `pipeline.py`. These modules connect the CLI to the rest of the system but do
-  not own ML logic.
-- `app/data/` contains everything that prepares tabular data before modeling:
-  loading CSV sources, joining store metadata, splitting date periods,
-  collecting stream batches, checking data quality, preprocessing raw columns
-  and building features.
-- `app/models/` remains focused on reusable model building blocks: estimator
-  wrappers, factories and sklearn-compatible preprocessing transformers.
-- `app/training/` owns model lifecycle work: initial pretraining, stream
-  updates, diagnostics and model interpretation artifacts.
-- `app/serving/` owns prediction serving. It loads the trained model, applies
-  the same feature path as training and writes inference outputs.
-- `app/evaluation/` is separated from runtime training because offline
-  comparison is an analysis workflow, not part of the streaming update loop.
-- `app/monitoring/` records operation-level performance metadata that can be
-  consumed by reports.
-- `app/reporting/` and `app/visualization/` stay presentation-focused: reports
-  assemble outputs, while visualization contains reusable chart rendering.
+- `app/core/` содержит связующий код проекта: `config.py`, `logging_utils.py`
+  и `pipeline.py`. Эти модули соединяют CLI с остальной системой, но не
+  содержат ML-логику.
+- `app/data/` содержит подготовку табличных данных до modeling: загрузку CSV,
+  join с store metadata, разбиение периодов по датам, сбор stream batch-ей,
+  проверку качества данных, preprocessing raw columns и построение признаков.
+- `app/models/` содержит переиспользуемые блоки для построения моделей:
+  wrappers, factories и sklearn-compatible preprocessing transformers.
+- `app/training/` отвечает за жизненный цикл модели: initial pretraining,
+  stream updates, diagnostics и артефакты интерпретации модели.
+- `app/serving/` отвечает за prediction serving. Он загружает обученную модель,
+  применяет тот же путь построения признаков, что и training, и пишет
+  inference outputs.
+- `app/evaluation/` отделен от runtime training, потому что offline comparison
+  является аналитическим workflow, а не частью цикла stream update.
+- `app/monitoring/` записывает operation-level performance metadata, которые
+  затем используются в отчетах.
+- `app/reporting/` и `app/visualization/` отвечают за представление
+  результатов: reporting собирает outputs, visualization содержит
+  переиспользуемый рендеринг графиков.
 
-External entrypoints stay small. `run.py` parses CLI arguments, loads config
-from `app.core.config`, configures logging and delegates execution to
-`app.core.pipeline.Pipeline`.
+Внешняя точка входа остается небольшой. `run.py` разбирает CLI-аргументы,
+загружает конфигурацию из `app.core.config`, настраивает logging и передает
+выполнение в `app.core.pipeline.Pipeline`.
 
 ## CLI
 
@@ -158,69 +162,87 @@ python run.py -mode summary -open
 python run.py -mode reset
 ```
 
-`inference` loads an external CSV such as `data/external/test.csv`, merges
-`store.csv` by `Store` when store metadata is available, applies the same
-feature-building logic as training, loads `models/best_model.pkl`, and writes
-the original input columns plus `predict` to:
+`inference` читает внешний CSV, например `data/external/test.csv`, объединяет
+его со `store.csv` по `Store`, если доступны store metadata, применяет тот же
+путь построения признаков, что и training, загружает `models/best_model.pkl` и
+записывает исходные входные колонки плюс `predict` в:
 
 - `artifacts/predictions/inference_<timestamp>.csv`
 
-`evaluate` is the main sanity-check command: it loads full `train.csv`, merges
-`store.csv`, applies the same date-period split as `pretrain`, trains configured
-regression models on the initial period and compares validation-period
-predictions with simple baselines.
+`evaluate` - основной sanity-check режим. Он читает полный `train.csv`,
+объединяет его со `store.csv`, применяет то же разбиение периодов по датам, что
+и `pretrain`, обучает настроенные regression models на initial period и
+сравнивает predictions на validation period с простыми baseline-моделями.
 
-Evaluation outputs:
+Результаты evaluation:
 
 - `reports/offline_model_evaluation.md`
 - `reports/figures/offline_evaluation/actual_vs_prediction_timeline.svg`
 - `artifacts/offline_model_evaluation.csv`
 
-`summary` writes both the Markdown summary and a browser-friendly dashboard at
-`reports/index.html`. Use `python run.py -mode summary -open` to generate it
-and open it with the default browser. Summary outputs include recent
-performance records (`inference`/`update`), data quality history, model metrics
-history, the aggregate all-update prediction timeline and the active model
-hyperparameters from config.
+`summary` пишет Markdown summary и dashboard для браузера в
+`reports/index.html`. Команда `python run.py -mode summary -open` генерирует
+summary и открывает dashboard в браузере по умолчанию. Summary включает
+последние performance records (`inference`/`update`), history качества данных,
+history метрик модели, общий prediction timeline по всем update-запускам и
+активные hyperparameters модели из config.
 
-CLI commands print their primary result to stdout: `update` prints `True` or
-`False` for each executed update and then prints the refreshed Markdown report
-path, `inference` prints the prediction CSV path, and `summary` prints the
-Markdown report path. Use `python run.py -mode update 3` to process up to three
-stream batches in sequence; execution stops early if no new batch is available.
-After update mode finishes, the Markdown report and HTML dashboard are
-regenerated automatically.
+CLI-команды печатают основной результат в stdout:
 
-## Training
+- `update` печатает `True` или `False` для каждого выполненного update, затем
+  печатает путь к обновленному Markdown report;
+- `inference` печатает путь к CSV с прогнозами;
+- `summary` печатает путь к Markdown report.
 
-Configured models live in `config/config.yaml`.
+Команда `python run.py -mode update 3` обрабатывает до трех stream batch-ей
+подряд. Выполнение останавливается раньше, если новых batch-ей нет. После
+завершения update mode Markdown report и HTML dashboard регенерируются
+автоматически.
 
-`pretrain` splits the unique source dates into initial, validation and stream
-periods. It trains the selected model on the initial period, evaluates it on the
-validation period, then refits the starting stream model on initial plus
-validation data. After successful pretraining, `current_model.pkl` is saved and
-the stream state is initialized so the next `update` starts from the first stream
-date.
+## Тесты
 
-Active regression models:
+Запустить focused unit-тесты локально:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Проверить синтаксис модулей проекта:
+
+```bash
+python -m compileall -q run.py app
+```
+
+## Обучение
+
+Настройки моделей находятся в `config/config.yaml`.
+
+`pretrain` делит уникальные даты source dataset на initial, validation и stream
+periods. Он обучает выбранную модель на initial period, оценивает ее на
+validation period, затем заново обучает стартовую stream-модель на initial +
+validation данных. После успешного предварительного обучения сохраняется
+`current_model.pkl`, а stream state инициализируется так, чтобы следующий
+`update` начался с первой stream-даты.
+
+Активные regression-модели:
 
 - `decision_tree_regression`
 - `knn_regression`
 - `ridge_regression`
 - `sgd_regression`
 
-Offline evaluation trains all configured `candidate_models`, so it compares
-the active model set and baselines even when runtime training uses
-`training_mode: single`.
+Offline evaluation обучает все настроенные `candidate_models`, поэтому
+сравнивает активный набор моделей и baseline-модели даже тогда, когда runtime
+training использует `training_mode: single`.
 
-The pipeline uses sklearn preprocessing:
+Pipeline использует sklearn preprocessing:
 
-- numeric columns: median imputation and standard scaling;
-- categorical columns: missing bucket and frequency encoding;
-- date-derived columns from `Date`: year, month, quarter, day and ISO week.
+- numeric columns: median imputation и standard scaling;
+- categorical columns: missing bucket и frequency encoding;
+- date-derived columns из `Date`: year, month, quarter, day и ISO week.
 
-Runtime `update` mode emulates streaming by writing the next
-`model.stream_batch_days` unique dates from the stream period:
+Runtime `update` mode эмулирует поток данных, записывая следующие
+`model.stream_batch_days` уникальных дат из stream period:
 
 - `data/raw/batch_XXXX.csv`
 - `data/processed/batch_XXXX_processed.csv`
@@ -234,16 +256,26 @@ Runtime `update` mode emulates streaming by writing the next
 - `models/best_model.pkl`
 - `reports/model_diagnostics_latest.md`
 - `reports/figures/model/prediction_timeline.svg`
-- `models/current_model.pkl` after `pretrain` or update
+- `models/current_model.pkl` после `pretrain` или `update`
 
-Regression metrics include `rmse`, `mae`, `r2`, `smape`, `pearson_corr` and
-`pearson_p_value`. The primary model-selection metric is `rmse`.
+Regression-метрики:
 
-Data Quality metrics include missingness, duplicate rows, constant columns,
-schema drift, IQR outlier share and categorical cardinality. Summary reports
-read these metrics from `artifacts/data_quality_history.csv`.
-Performance monitoring writes operation duration/status metadata to
-`artifacts/performance_history.csv`, and summary reports display recent rows.
+- `rmse`
+- `mae`
+- `r2`
+- `smape`
+- `pearson_corr`
+- `pearson_p_value`
 
-`reset` removes generated runtime artifacts and keeps source CSV files, config,
-code and `.gitkeep` files.
+Основная model-selection metric: `rmse`.
+
+Data Quality metrics включают missingness, duplicate rows, constant columns,
+schema drift, IQR outlier share и categorical cardinality. Summary reports
+читают эти метрики из `artifacts/data_quality_history.csv`.
+
+Performance monitoring пишет metadata о длительности и статусе операций в
+`artifacts/performance_history.csv`, а summary reports показывают последние
+строки из этого файла.
+
+`reset` удаляет сгенерированные runtime artifacts и сохраняет исходные CSV,
+конфигурацию, код и `.gitkeep` files.
