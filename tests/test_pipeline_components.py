@@ -166,7 +166,9 @@ class PipelineComponentTests(unittest.TestCase):
     def test_summary_report_contains_hyperparameters_and_performance(self) -> None:
         with TemporaryDirectory() as tmp:
             config = self._temp_config(Path(tmp))
-            config.paths.performance_history_path.parent.mkdir(parents=True, exist_ok=True)
+            config.paths.performance_history_path.parent.mkdir(
+                parents=True, exist_ok=True
+            )
             pd.DataFrame(
                 [
                     {
@@ -188,7 +190,9 @@ class PipelineComponentTests(unittest.TestCase):
             self.assertIn("## Model hyperparameters", text)
             self.assertIn(f"- selected_model: {config.model.selected_model}", text)
 
-    def test_html_report_keeps_base_hyperparameters_without_explicit_params(self) -> None:
+    def test_html_report_keeps_base_hyperparameters_without_explicit_params(
+        self,
+    ) -> None:
         with TemporaryDirectory() as tmp:
             config = self._temp_config(Path(tmp))
             model = replace(
@@ -267,7 +271,9 @@ class PipelineComponentTests(unittest.TestCase):
             self.assertIn("Interpretation unavailable", text)
             self.assertNotIn("interpretation_top_features_path", output)
 
-    def test_model_interpretation_writer_extracts_feature_names_from_preprocessor(self) -> None:
+    def test_model_interpretation_writer_extracts_feature_names_from_preprocessor(
+        self,
+    ) -> None:
         with TemporaryDirectory() as tmp:
             config = self._temp_config(Path(tmp))
             writer = ModelInterpretationWriter(config)
@@ -405,8 +411,7 @@ class ConfigLoadingTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.yaml"
             config_path.write_text(
-                dedent(
-                    """
+                dedent("""
                     project:
                       name: Test Project
                       random_seed: 123
@@ -460,9 +465,7 @@ class ConfigLoadingTests(unittest.TestCase):
                       random_forest:
                         n_estimators: 120
                         max_depth: 6
-                    """
-                ).strip()
-                + "\n",
+                    """).strip() + "\n",
                 encoding="utf-8",
             )
 
@@ -477,7 +480,9 @@ class ConfigLoadingTests(unittest.TestCase):
             self.assertIsNone(config.data.store_path)
             self.assertEqual(config.model.candidate_models, ("linear", "random_forest"))
             self.assertEqual(config.model.selected_model, "linear")
-            self.assertEqual(config.model.model_parameters["random_forest"]["max_depth"], 6)
+            self.assertEqual(
+                config.model.model_parameters["random_forest"]["max_depth"], 6
+            )
             self.assertEqual(
                 config.paths.data_quality_history_path,
                 Path("artifacts/data_quality_history.csv"),

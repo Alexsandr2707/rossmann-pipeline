@@ -10,7 +10,6 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline as SklearnPipeline
 from sklearn.preprocessing import StandardScaler
 
-
 FEATURE_PREPROCESSING_VERSION = "standard_scale_frequency_v6"
 
 
@@ -26,7 +25,10 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         for column in self.feature_names_in_:
             frequencies = data[column].value_counts(normalize=True, dropna=False)
             self.frequency_maps_.append(
-                {category: float(frequency) for category, frequency in frequencies.items()}
+                {
+                    category: float(frequency)
+                    for category, frequency in frequencies.items()
+                }
             )
         return self
 

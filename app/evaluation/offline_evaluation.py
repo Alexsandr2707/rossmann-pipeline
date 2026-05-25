@@ -12,7 +12,11 @@ from app.data.dataset_loading import load_source_dataset
 from app.data.feature_engineering import build_features_and_target
 from app.training.model_training import ModelTrainer
 from app.models import canonical_model_name
-from app.data.period_splitting import DatePeriodSplit, rows_for_dates, split_date_periods
+from app.data.period_splitting import (
+    DatePeriodSplit,
+    rows_for_dates,
+    split_date_periods,
+)
 from app.data.preprocessing import DataPreprocessor
 from app.visualization import write_time_series_svg
 
@@ -122,9 +126,7 @@ class OfflineModelEvaluator:
             None,
         )
         row = self._regression_metrics(model_name, y_valid, predictions)
-        row["notes"] = (
-            "Project regression model; Customers is excluded from features."
-        )
+        row["notes"] = "Project regression model; Customers is excluded from features."
         return row, predictions
 
     def _write_best_model_timeline_chart(

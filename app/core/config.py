@@ -139,7 +139,9 @@ def load_config(path: str | Path) -> Config:
             categorical_columns=tuple(
                 str(item) for item in data_schema["categorical_columns"]
             ),
-            datetime_columns=tuple(str(item) for item in data_schema["datetime_columns"]),
+            datetime_columns=tuple(
+                str(item) for item in data_schema["datetime_columns"]
+            ),
             id_columns=tuple(str(item) for item in data_schema["id_columns"]),
             service_columns=tuple(str(item) for item in data_schema["service_columns"]),
         ),
@@ -182,9 +184,7 @@ def load_config(path: str | Path) -> Config:
             initial_train_ratio=float(model.get("initial_train_ratio", 0.50)),
             validation_ratio=float(model.get("validation_ratio", 0.20)),
             stream_ratio=float(model.get("stream_ratio", 0.30)),
-            rolling_train_period_days=int(
-                model.get("rolling_train_period_days", 365)
-            ),
+            rolling_train_period_days=int(model.get("rolling_train_period_days", 365)),
             pretrain_mark_collector_state=bool(
                 model.get("pretrain_mark_collector_state", True)
             ),
@@ -205,9 +205,7 @@ def _model_parameters(raw: Any) -> dict[str, dict[str, Any]]:
             parameters[str(model_name)] = {}
             continue
         if not isinstance(model_params, dict):
-            raise ValueError(
-                f"Model parameters for {model_name} must be a mapping."
-            )
+            raise ValueError(f"Model parameters for {model_name} must be a mapping.")
         parameters[str(model_name)] = {
             str(parameter_name): parameter_value
             for parameter_name, parameter_value in model_params.items()

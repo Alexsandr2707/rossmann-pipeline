@@ -32,7 +32,9 @@ class PredictionServing:
             raw_input = pd.read_csv(input_path, low_memory=False)
             input_rows = int(len(raw_input))
             serving_dataset = self._prepare_raw_dataset(raw_input, input_path)
-            processed = DataPreprocessor(self.config).transform_features(serving_dataset)
+            processed = DataPreprocessor(self.config).transform_features(
+                serving_dataset
+            )
             if len(processed) != len(raw_input):
                 raise ValueError(
                     "Inference preprocessing changed row count: "
@@ -93,9 +95,7 @@ class PredictionServing:
 
     def _next_output_path(self) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_path = (
-            self.config.paths.predictions_dir / f"inference_{timestamp}.csv"
-        )
+        base_path = self.config.paths.predictions_dir / f"inference_{timestamp}.csv"
         if not base_path.exists():
             return base_path
 

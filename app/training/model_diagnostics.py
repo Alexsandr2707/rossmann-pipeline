@@ -39,7 +39,9 @@ class ModelDiagnosticsWriter:
         return self.config.paths.reports_dir / "figures" / "model"
 
     def _archive_model_figures_dir(self) -> Path:
-        return self.config.paths.reports_dir / "figures" / "archive" / "model_diagnostics"
+        return (
+            self.config.paths.reports_dir / "figures" / "archive" / "model_diagnostics"
+        )
 
     def _history_figures_dir(self) -> Path:
         return self.config.paths.reports_dir / "figures" / "history"
@@ -84,7 +86,9 @@ class ModelDiagnosticsWriter:
             )
         )
         predictions_path = self.config.paths.predictions_dir / f"{base_name}.csv"
-        diagnostics_base_name = f"model_diagnostics_batch_{batch_index:04d}_{model_name}"
+        diagnostics_base_name = (
+            f"model_diagnostics_batch_{batch_index:04d}_{model_name}"
+        )
         latest_report_path = self.config.paths.reports_dir / self._LATEST_REPORT_NAME
         archive_report_path = (
             self.config.paths.reports_dir
@@ -119,7 +123,9 @@ class ModelDiagnosticsWriter:
         archive_prediction_timeline_path = (
             archive_figures_dir / self._LATEST_PLOT_NAMES["prediction_timeline"]
         )
-        archive_residuals_path = archive_figures_dir / self._LATEST_PLOT_NAMES["residuals"]
+        archive_residuals_path = (
+            archive_figures_dir / self._LATEST_PLOT_NAMES["residuals"]
+        )
 
         actual_vs_pred_path = (
             model_figures_dir / self._LATEST_PLOT_NAMES["actual_vs_prediction"]
@@ -287,8 +293,7 @@ class ModelDiagnosticsWriter:
             y_min, y_max = self._robust_history_range(y_values)
             clipped_y_values = np.clip(y_values, y_min, y_max)
             plot_path = (
-                self._history_figures_dir()
-                / f"model_metrics_history_{metric_name}.svg"
+                self._history_figures_dir() / f"model_metrics_history_{metric_name}.svg"
             )
             write_line_chart_svg(
                 plot_path,
@@ -367,7 +372,9 @@ class ModelDiagnosticsWriter:
         plot_paths: list[Path | None],
     ) -> None:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        lines = self._diagnostics_markdown_lines(metrics, predictions_path, plot_paths, report_path)
+        lines = self._diagnostics_markdown_lines(
+            metrics, predictions_path, plot_paths, report_path
+        )
         report_path.write_text("\n".join(lines), encoding="utf-8")
 
     def _diagnostics_markdown_lines(

@@ -13,7 +13,6 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
-
 FIGURE_SIZE = (9.0, 5.0)
 COLORS = ("tab:blue", "tab:red", "tab:green", "tab:purple", "tab:orange")
 

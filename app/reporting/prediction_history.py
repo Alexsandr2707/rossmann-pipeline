@@ -8,10 +8,7 @@ import pandas as pd
 from app.core.config import Config
 from app.visualization import write_time_series_svg
 
-
-UPDATE_PREDICTION_TIMELINE_PATH = Path(
-    "figures/history/update_prediction_timeline.svg"
-)
+UPDATE_PREDICTION_TIMELINE_PATH = Path("figures/history/update_prediction_timeline.svg")
 
 
 def generate_update_prediction_timeline(config: Config) -> Path | None:

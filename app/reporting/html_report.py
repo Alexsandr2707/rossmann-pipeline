@@ -14,7 +14,6 @@ from app.reporting.prediction_history import (
     generate_update_prediction_timeline,
 )
 
-
 HTML_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
@@ -304,7 +303,9 @@ def generate_html_report(config: Config) -> Path:
                 "Outlier part",
                 latest_quality.get("numeric_outlier_part", "not ready"),
             ),
-            card("Model", latest_metrics.get("model_name", config.model.selected_model)),
+            card(
+                "Model", latest_metrics.get("model_name", config.model.selected_model)
+            ),
             card("RMSE", latest_metrics.get("rmse", "not ready")),
             card("MAE", latest_metrics.get("mae", "not ready")),
             card("R2", latest_metrics.get("r2", "not ready")),
@@ -326,26 +327,30 @@ def generate_html_report(config: Config) -> Path:
         ],
         data_quality_links=[
             link(reports_dir, config.paths.data_quality_history_path),
-            link(
-                reports_dir,
-                Path(latest_quality["eda_report_path"]),
-                missing_label="EDA batch report is missing",
-            )
-            if latest_quality.get("eda_report_path")
-            else {"href": "", "label": "EDA batch report is missing"},
+            (
+                link(
+                    reports_dir,
+                    Path(latest_quality["eda_report_path"]),
+                    missing_label="EDA batch report is missing",
+                )
+                if latest_quality.get("eda_report_path")
+                else {"href": "", "label": "EDA batch report is missing"}
+            ),
         ],
-        data_quality_table=table(
-            data_quality_rows[-8:],
-            [
-                "batch_index",
-                "rows",
-                "missing_part",
-                "duplicate_part",
-                "numeric_outlier_part",
-            ],
-        )
-        if data_quality_rows
-        else Markup("<p>No data quality history yet.</p>"),
+        data_quality_table=(
+            table(
+                data_quality_rows[-8:],
+                [
+                    "batch_index",
+                    "rows",
+                    "missing_part",
+                    "duplicate_part",
+                    "numeric_outlier_part",
+                ],
+            )
+            if data_quality_rows
+            else Markup("<p>No data quality history yet.</p>")
+        ),
         model_charts=[
             image(reports_dir, reports_dir / "figures/model/prediction_timeline.svg"),
             image(reports_dir, reports_dir / "figures/model/actual_vs_prediction.svg"),
@@ -373,11 +378,15 @@ def generate_html_report(config: Config) -> Path:
                 reports_dir / "figures/history/model_metrics_history_r2.svg",
             ),
         ],
-        metric_table=table(metric_rows[-8:])
-        if metric_rows
-        else Markup("<p>No metric history yet.</p>"),
+        metric_table=(
+            table(metric_rows[-8:])
+            if metric_rows
+            else Markup("<p>No metric history yet.</p>")
+        ),
         interpretation_cards=[
-            card("Model", latest_metrics.get("model_name", config.model.selected_model)),
+            card(
+                "Model", latest_metrics.get("model_name", config.model.selected_model)
+            ),
             card("Batch", latest_metrics.get("batch_index", "not ready")),
             card("Period", latest_metrics.get("period_type", "not ready")),
             card(
@@ -391,20 +400,24 @@ def generate_html_report(config: Config) -> Path:
                 interpretation_report_path,
                 missing_label="model_interpretation_latest.md is missing",
             ),
-            link(
-                reports_dir,
-                top_features_path,
-                missing_label="top features CSV is missing",
-            )
-            if top_features_path
-            else {"href": "", "label": "top features CSV is missing"},
+            (
+                link(
+                    reports_dir,
+                    top_features_path,
+                    missing_label="top features CSV is missing",
+                )
+                if top_features_path
+                else {"href": "", "label": "top features CSV is missing"}
+            ),
         ],
-        interpretation_table=table(
-            top_feature_rows[:20],
-            ["feature", "value", "abs_value"],
-        )
-        if top_feature_rows
-        else Markup("<p>No model interpretation table yet.</p>"),
+        interpretation_table=(
+            table(
+                top_feature_rows[:20],
+                ["feature", "value", "abs_value"],
+            )
+            if top_feature_rows
+            else Markup("<p>No model interpretation table yet.</p>")
+        ),
         performance_cards=[
             card("Operation", latest_performance.get("operation", "not ready")),
             card("Status", latest_performance.get("status", "not ready")),
@@ -415,22 +428,24 @@ def generate_html_report(config: Config) -> Path:
             card("Input rows", latest_performance.get("input_rows", "not ready")),
             card("Output rows", latest_performance.get("output_rows", "not ready")),
         ],
-        performance_table=table(
-            performance_rows[-8:],
-            [
-                "timestamp",
-                "operation",
-                "status",
-                "duration_seconds",
-                "input_rows",
-                "output_rows",
-                "model_name",
-                "output_path",
-                "error_message",
-            ],
-        )
-        if performance_rows
-        else Markup("<p>No performance history yet.</p>"),
+        performance_table=(
+            table(
+                performance_rows[-8:],
+                [
+                    "timestamp",
+                    "operation",
+                    "status",
+                    "duration_seconds",
+                    "input_rows",
+                    "output_rows",
+                    "model_name",
+                    "output_path",
+                    "error_message",
+                ],
+            )
+            if performance_rows
+            else Markup("<p>No performance history yet.</p>")
+        ),
         hyperparameters_table=base_hyperparameters_table + explicit_params_table,
         offline_charts=[
             image(
@@ -441,7 +456,9 @@ def generate_html_report(config: Config) -> Path:
         ],
         offline_links=[
             link(reports_dir, reports_dir / "offline_model_evaluation.md"),
-            link(reports_dir, config.paths.artifacts_dir / "offline_model_evaluation.csv"),
+            link(
+                reports_dir, config.paths.artifacts_dir / "offline_model_evaluation.csv"
+            ),
         ],
         file_links=[
             link(reports_dir, reports_dir / "summary/summary_latest.md"),

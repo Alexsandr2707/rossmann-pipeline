@@ -131,11 +131,17 @@ class ModelTrainer:
                     "date_min": split.validation_dates.min().strftime("%Y-%m-%d"),
                     "date_max": split.validation_dates.max().strftime("%Y-%m-%d"),
                     "date_count": int(len(split.validation_dates)),
-                    "train_window_date_min": split.initial_dates.min().strftime("%Y-%m-%d"),
-                    "train_window_date_max": split.initial_dates.max().strftime("%Y-%m-%d"),
+                    "train_window_date_min": split.initial_dates.min().strftime(
+                        "%Y-%m-%d"
+                    ),
+                    "train_window_date_max": split.initial_dates.max().strftime(
+                        "%Y-%m-%d"
+                    ),
                     "initial_training": True,
                     "training_rows_total": int(len(x_train)),
-                    "pretrain_rows": int(batch_metadata.get("pretrain_rows", len(dataset))),
+                    "pretrain_rows": int(
+                        batch_metadata.get("pretrain_rows", len(dataset))
+                    ),
                     "pretrain_time_min": str(batch_metadata.get("time_min", "")),
                     "pretrain_time_max": str(batch_metadata.get("time_max", "")),
                     **period_boundaries(split),
@@ -176,7 +182,9 @@ class ModelTrainer:
         best_pipeline = refitted_models[best_model_name]
 
         model_path = self._save_model_version(best_pipeline, best_metrics)
-        self._save_current_model(best_pipeline, best_metrics, model_path, best_model_name)
+        self._save_current_model(
+            best_pipeline, best_metrics, model_path, best_model_name
+        )
         self._save_best_model(best_pipeline, best_metrics, model_path)
         self._append_metrics(results, model_path)
         self.diagnostics.write_metrics_history_plot(self.metrics_history_path)
@@ -304,9 +312,7 @@ class ModelTrainer:
                 training_dataset[self.config.data.time_column],
                 errors="coerce",
             ).dt.floor("D")
-            training_dataset = training_dataset.loc[
-                parsed_dates >= window_start
-            ].copy()
+            training_dataset = training_dataset.loc[parsed_dates >= window_start].copy()
             return (
                 self._fit_pipeline_on_dataset(training_dataset, model_name),
                 self._training_window_metadata(training_dataset),
@@ -435,7 +441,9 @@ class ModelTrainer:
                     f"Selected model is not in candidate_models: {selected_model}"
                 )
             return (selected_model,)
-        raise ValueError(f"Unsupported training mode: {self.config.model.training_mode}")
+        raise ValueError(
+            f"Unsupported training mode: {self.config.model.training_mode}"
+        )
 
     def _model_parameters(self, model_name: str) -> dict[str, Any]:
         canonical_name = canonical_model_name(model_name)
@@ -513,7 +521,9 @@ class ModelTrainer:
         batch_index = int(metrics["batch_index"])
         model_name = str(metrics["model_name"])
         if batch_index < 0:
-            model_path = self.config.paths.models_dir / f"model_pretrain_{model_name}.pkl"
+            model_path = (
+                self.config.paths.models_dir / f"model_pretrain_{model_name}.pkl"
+            )
         else:
             model_path = self.config.paths.models_dir / (
                 f"model_v{batch_index:04d}_{model_name}.pkl"
@@ -544,11 +554,12 @@ class ModelTrainer:
         }
         if self.best_model_path.exists():
             current = joblib.load(self.best_model_path)
-            if (
-                current.get("feature_preprocessing_version")
-                == FEATURE_PREPROCESSING_VERSION
-                and current.get("model_signature")
-                == self._model_signature(str(metrics["model_name"]))
+            if current.get(
+                "feature_preprocessing_version"
+            ) == FEATURE_PREPROCESSING_VERSION and current.get(
+                "model_signature"
+            ) == self._model_signature(
+                str(metrics["model_name"])
             ):
                 current_metrics = current.get("metrics", {})
                 current_score = current_metrics.get(self.config.model.primary_metric)
@@ -587,9 +598,10 @@ class ModelTrainer:
         self.metrics_history_path.parent.mkdir(parents=True, exist_ok=True)
         rows = pd.DataFrame(metrics_rows)
         rows["model_path"] = str(model_path)
-        rows["is_best_in_update"] = rows[self.config.model.primary_metric] == rows[
-            self.config.model.primary_metric
-        ].min()
+        rows["is_best_in_update"] = (
+            rows[self.config.model.primary_metric]
+            == rows[self.config.model.primary_metric].min()
+        )
         if self.metrics_history_path.exists():
             history = pd.read_csv(self.metrics_history_path)
             rows = pd.concat([history, rows], ignore_index=True, sort=False)

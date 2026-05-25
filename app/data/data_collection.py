@@ -65,8 +65,7 @@ class DataCollector:
 
         batch = rows_for_dates(dataset, self.config.data.time_column, batch_dates)
         batch_path = (
-            self.config.paths.raw_data_dir
-            / f"batch_{state.stream_batch_index:04d}.csv"
+            self.config.paths.raw_data_dir / f"batch_{state.stream_batch_index:04d}.csv"
         )
         batch.to_csv(batch_path, index=False)
 
@@ -198,9 +197,11 @@ class DataCollector:
             "target_min": float(target.min()) if target.notna().any() else None,
             "target_max": float(target.max()) if target.notna().any() else None,
             "target_missing_strategy": self.config.target_preprocessing.missing_strategy,
-            "target_missing_indicator_column": self.preprocessor.target_missing_indicator_column
-            if self.config.target_preprocessing.add_missing_indicator
-            else "",
+            "target_missing_indicator_column": (
+                self.preprocessor.target_missing_indicator_column
+                if self.config.target_preprocessing.add_missing_indicator
+                else ""
+            ),
         }
 
     def _count_existing_columns(

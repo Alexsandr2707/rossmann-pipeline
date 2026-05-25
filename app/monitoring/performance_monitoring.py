@@ -31,7 +31,9 @@ class PerformanceMonitor:
     def start(self) -> float:
         return perf_counter()
 
-    def record(self, record: PerformanceRecord, start_time: float | None = None) -> None:
+    def record(
+        self, record: PerformanceRecord, start_time: float | None = None
+    ) -> None:
         duration = record.duration_seconds
         if start_time is not None:
             duration = perf_counter() - start_time

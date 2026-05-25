@@ -6,7 +6,6 @@ import pandas as pd
 
 from app.core.config import Config
 
-
 STORE_KEY = "Store"
 STORE_METADATA_FILE = "store.csv"
 

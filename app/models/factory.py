@@ -9,7 +9,6 @@ from app.models.sklearn_regression import (
     RefitRidgeRegressor,
 )
 
-
 DECISION_TREE_REGRESSION_MODEL_NAME = "decision_tree_regression"
 KNN_REGRESSION_MODEL_NAME = "knn_regression"
 RIDGE_REGRESSION_MODEL_NAME = "ridge_regression"
@@ -41,9 +40,7 @@ def make_model(
     parameters = dict(model_parameters)
 
     if name == DECISION_TREE_REGRESSION_MODEL_NAME:
-        return RefitDecisionTreeRegressor(
-            **_with_random_state(parameters, random_seed)
-        )
+        return RefitDecisionTreeRegressor(**_with_random_state(parameters, random_seed))
     if name == KNN_REGRESSION_MODEL_NAME:
         return RefitKNeighborsRegressor(**parameters)
     if name == RIDGE_REGRESSION_MODEL_NAME:
@@ -57,7 +54,9 @@ def supports_incremental_update(model: Any) -> bool:
     return bool(getattr(model, "supports_incremental_update", False))
 
 
-def model_signature(model_name: str, model_parameters: dict[str, Any]) -> dict[str, Any]:
+def model_signature(
+    model_name: str, model_parameters: dict[str, Any]
+) -> dict[str, Any]:
     return {
         "model_name": canonical_model_name(model_name),
         "model_parameters": model_parameters,

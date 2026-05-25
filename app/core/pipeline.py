@@ -159,9 +159,7 @@ class Pipeline:
         models_dir = self.config.paths.models_dir
         if not models_dir.exists():
             return []
-        return sorted(
-            path for path in models_dir.glob("*.pkl") if path.is_file()
-        )
+        return sorted(path for path in models_dir.glob("*.pkl") if path.is_file())
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)
@@ -223,7 +221,10 @@ class Pipeline:
                 self.config.paths.reports_dir / "figures" / "model",
                 self.config.paths.reports_dir / "figures" / "history",
                 self.config.paths.reports_dir / "figures",
-                self.config.paths.reports_dir / "figures" / "archive" / "model_diagnostics",
+                self.config.paths.reports_dir
+                / "figures"
+                / "archive"
+                / "model_diagnostics",
                 self.config.paths.reports_dir / "figures" / "archive",
                 self.config.paths.reports_dir / "archive" / "model_diagnostics",
                 self.config.paths.reports_dir / "archive",

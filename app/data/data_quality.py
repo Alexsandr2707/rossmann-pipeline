@@ -151,7 +151,9 @@ class DataQualityAnalyzer:
 
             outlier_cells += column_outliers
             numeric_cells += int(values.shape[0])
-            column_parts[column] = self._safe_part(column_outliers, int(values.shape[0]))
+            column_parts[column] = self._safe_part(
+                column_outliers, int(values.shape[0])
+            )
 
         return {
             "numeric_outlier_part": self._safe_part(outlier_cells, numeric_cells),
