@@ -86,7 +86,7 @@ def main() -> int:
             dashboard_path = config.paths.reports_dir / "index.html"
             if args.open:
                 open_report(dashboard_path)
-    except NotImplementedError as error:
+    except (FileExistsError, NotImplementedError) as error:
         print(str(error), file=sys.stderr)
         return 1
     return 0

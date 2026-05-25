@@ -98,6 +98,17 @@ class Pipeline:
 
     def pretrain(self) -> Path:
         self.logger.info("Pretrain mode requested")
+        existing_models = self._existing_model_files()
+        if existing_models:
+            model_list = ", ".join(str(path) for path in existing_models[:3])
+            if len(existing_models) > 3:
+                model_list = f"{model_list}, ..."
+            raise FileExistsError(
+                "Pretrain must start from a clean project state. "
+                f"Existing model file(s): {model_list}. "
+                "Run reset before pretrain if you want to rebuild the model lifecycle."
+            )
+
         collector = self._get_collector()
         validation = collector.validate_source_dataset()
         self.logger.info("Source dataset validation: %s", validation)
@@ -143,6 +154,14 @@ class Pipeline:
         import pandas as pd
 
         return pd.read_csv(batch_path, low_memory=False)
+
+    def _existing_model_files(self) -> list[Path]:
+        models_dir = self.config.paths.models_dir
+        if not models_dir.exists():
+            return []
+        return sorted(
+            path for path in models_dir.glob("*.pkl") if path.is_file()
+        )
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)

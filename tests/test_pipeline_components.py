@@ -16,6 +16,7 @@ from sklearn.dummy import DummyRegressor
 from sklearn.tree import DecisionTreeRegressor
 
 from app.core.config import Config, load_config
+from app.core.pipeline import Pipeline
 from app.data.data_quality import DataQualityAnalyzer
 from app.data.feature_engineering import build_features
 from app.training.model_interpretation import ModelInterpretationWriter
@@ -320,11 +321,25 @@ class PipelineComponentTests(unittest.TestCase):
         self.assertNotIn("categorical__0_frequency", names)
         self.assertNotIn("categorical__1_frequency", names)
 
+    def test_pretrain_rejects_existing_model_files(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config = self._temp_config(Path(tmp))
+            existing_model_path = config.paths.models_dir / "current_model.pkl"
+            existing_model_path.parent.mkdir(parents=True, exist_ok=True)
+            existing_model_path.write_bytes(b"existing model")
+
+            with self.assertRaisesRegex(
+                FileExistsError,
+                "Run reset before pretrain",
+            ):
+                Pipeline(config).pretrain()
+
     def _temp_config(self, root: Path) -> Config:
         config = load_config("config/config.yaml")
         paths = replace(
             config.paths,
             artifacts_dir=root / "artifacts",
+            models_dir=root / "models",
             reports_dir=root / "reports",
             predictions_dir=root / "artifacts" / "predictions",
             data_quality_history_path=root / "artifacts" / "data_quality_history.csv",
