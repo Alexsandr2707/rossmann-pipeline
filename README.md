@@ -13,8 +13,17 @@ pip install -r requirements.txt
 
 ## Docker CI/CD
 
-The Docker setup keeps source data, models and generated runtime outputs outside
-the image. They are mounted from the local working tree into the container:
+This repository uses a Docker-only local CI/CD workflow for the current
+assignment. Compose defines repeatable services for tests, training, updates,
+evaluation, inference, summary generation and a small local CD sequence. GitHub
+Actions is intentionally not included in this variant, so CI/CD requirements
+that explicitly require GitHub Actions are not closed here and can be moved to a
+future workflow.
+
+The image contains code, configuration and Python dependencies. Source data,
+trained models and generated runtime outputs stay outside the image because
+they are environment-specific, can be large, and must persist between container
+runs. Compose mounts them from the local working tree into the container:
 
 - `data/`
 - `models/`
@@ -22,32 +31,54 @@ the image. They are mounted from the local working tree into the container:
 - `reports/`
 - `logs/`
 
-Build the local image:
+Build the local image when Docker image creation is allowed:
 
 ```bash
 docker compose build
 ```
 
-Run the CI test command inside Docker:
+Run the Docker CI test service:
 
 ```bash
 docker compose run --rm ci
 ```
 
-Run pipeline commands through the Docker image:
+Run pipeline stages through dedicated Compose services:
 
 ```bash
-docker compose run --rm pipeline -mode pretrain
-docker compose run --rm pipeline -mode update
-docker compose run --rm pipeline -mode evaluate
-docker compose run --rm pipeline -mode inference -file data/external/test.csv
+docker compose run --rm pretrain
+docker compose run --rm train
+docker compose run --rm update
+docker compose run --rm evaluate
+docker compose run --rm inference
 docker compose run --rm summary
 ```
 
-This Compose workflow is the first CD stage: after tests pass, run the desired
-pipeline mode in the same image and persist outputs through mounted directories.
-A future GitHub Actions workflow can reuse the same `docker compose build` and
-`docker compose run --rm ci` commands.
+`pipeline` remains available as a generic entrypoint for custom CLI arguments:
+
+```bash
+docker compose run --rm pipeline -mode inference -file data/external/test.csv
+docker compose run --rm pipeline -mode update
+```
+
+Run multiple update steps by starting the `update` or `pipeline -mode update`
+service repeatedly.
+
+The local CD service runs tests, pretraining and summary generation in order in
+the same Compose environment:
+
+```bash
+docker compose run --rm local-cd
+```
+
+The Docker-only workflow satisfies the local assignment evidence through these
+runtime artifacts:
+
+- `logs/pipeline.log`
+- `models/*.pkl`
+- `artifacts/collector_state.json`
+- `artifacts/*history*.csv`
+- `reports/index.html`
 
 ## Data
 

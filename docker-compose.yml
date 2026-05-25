@@ -21,12 +21,40 @@ services:
   pipeline:
     <<: *pipeline-service
     command: ["-mode", "summary"]
+
+  train:
+    <<: *pipeline-service
+    command: ["-mode", "pretrain"]
+
+  pretrain:
+    <<: *pipeline-service
+    command: ["-mode", "pretrain"]
+
   update:
     <<: *pipeline-service
     command: ["-mode", "update"]
+
+  evaluate:
+    <<: *pipeline-service
+    command: ["-mode", "evaluate"]
+
+  inference:
+    <<: *pipeline-service
+    command: ["-mode", "inference", "-file", "data/external/test.csv"]
+
   reset:
     <<: *pipeline-service
     command: ["-mode", "reset"]
+
   summary:
     <<: *pipeline-service
     command: ["-mode", "summary"]
+
+  local-cd:
+    <<: *pipeline-service
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        python -m unittest discover -s tests -v
+        && python run.py -mode pretrain
+        && python run.py -mode summary
