@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from app.config import Config
+from app.core.config import Config
 
 
 def build_features(dataset: pd.DataFrame, config: Config) -> pd.DataFrame:

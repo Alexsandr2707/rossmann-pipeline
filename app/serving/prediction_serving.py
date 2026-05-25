@@ -7,11 +7,11 @@ from typing import Any
 import joblib
 import pandas as pd
 
-from app.config import Config
-from app.dataset_loading import merge_store_metadata
-from app.feature_engineering import build_features
-from app.performance_monitoring import PerformanceMonitor, PerformanceRecord
-from app.preprocessing import DataPreprocessor
+from app.core.config import Config
+from app.data.dataset_loading import merge_store_metadata
+from app.data.feature_engineering import build_features
+from app.monitoring.performance_monitoring import PerformanceMonitor, PerformanceRecord
+from app.data.preprocessing import DataPreprocessor
 
 
 class PredictionServing:

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
-from app.config import Config
+from app.core.config import Config
 
 
 @dataclass(frozen=True)

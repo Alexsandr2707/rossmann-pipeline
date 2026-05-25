@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from app.config import Config
+from app.core.config import Config
 
 
 @dataclass(frozen=True)

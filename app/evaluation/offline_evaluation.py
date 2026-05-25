@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from app.config import Config
-from app.dataset_loading import load_source_dataset
-from app.feature_engineering import build_features_and_target
-from app.model_training import ModelTrainer
+from app.core.config import Config
+from app.data.dataset_loading import load_source_dataset
+from app.data.feature_engineering import build_features_and_target
+from app.training.model_training import ModelTrainer
 from app.models import canonical_model_name
-from app.period_splitting import DatePeriodSplit, rows_for_dates, split_date_periods
-from app.preprocessing import DataPreprocessor
+from app.data.period_splitting import DatePeriodSplit, rows_for_dates, split_date_periods
+from app.data.preprocessing import DataPreprocessor
 from app.visualization import write_time_series_svg
 
 

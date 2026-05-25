@@ -8,15 +8,15 @@ from typing import Any
 
 import pandas as pd
 
-from app.config import Config
-from app.dataset_loading import load_source_dataset
-from app.period_splitting import (
+from app.core.config import Config
+from app.data.dataset_loading import load_source_dataset
+from app.data.period_splitting import (
     period_boundaries,
     rows_for_dates,
     split_date_periods,
     stream_date_batch,
 )
-from app.preprocessing import DataPreprocessor
+from app.data.preprocessing import DataPreprocessor
 
 
 @dataclass

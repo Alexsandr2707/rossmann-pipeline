@@ -51,9 +51,9 @@ def main() -> int:
         print("Update count must be a positive integer.", file=sys.stderr)
         return 2
 
-    from app.config import load_config
-    from app.logging_utils import configure_logging
-    from app.pipeline import Pipeline
+    from app.core.config import load_config
+    from app.core.logging_utils import configure_logging
+    from app.core.pipeline import Pipeline
 
     config = load_config(args.config)
     configure_logging(config.paths.pipeline_log_path)
@@ -71,9 +71,9 @@ def main() -> int:
             for _ in range(update_count):
                 updated = bool(pipeline.update())
                 print(updated)
+                print(pipeline.summary())
                 if not updated:
                     break
-            print(pipeline.summary())
         elif args.mode == "pretrain":
             print(pipeline.pretrain())
         elif args.mode == "reset":

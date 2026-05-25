@@ -15,14 +15,14 @@ from sklearn.linear_model import Ridge
 from sklearn.dummy import DummyRegressor
 from sklearn.tree import DecisionTreeRegressor
 
-from app.config import Config, load_config
-from app.data_quality import DataQualityAnalyzer
-from app.feature_engineering import build_features
-from app.model_interpretation import ModelInterpretationWriter
+from app.core.config import Config, load_config
+from app.data.data_quality import DataQualityAnalyzer
+from app.data.feature_engineering import build_features
+from app.training.model_interpretation import ModelInterpretationWriter
 from app.models.preprocessing import FrequencyEncoder, make_feature_preprocessor
-from app.performance_monitoring import PerformanceMonitor, PerformanceRecord
-from app.prediction_serving import PredictionServing
-from app.preprocessing import DataPreprocessor
+from app.monitoring.performance_monitoring import PerformanceMonitor, PerformanceRecord
+from app.serving.prediction_serving import PredictionServing
+from app.data.preprocessing import DataPreprocessor
 from app.reporting.html_report import generate_html_report
 from app.reporting.summary_report import generate_summary_report
 

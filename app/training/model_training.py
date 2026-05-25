@@ -15,10 +15,10 @@ from sklearn.metrics import (
 from sklearn.pipeline import Pipeline as SklearnPipeline
 from scipy.stats import pearsonr
 
-from app.config import Config
-from app.feature_engineering import build_features_and_target
-from app.model_diagnostics import ModelDiagnosticsWriter
-from app.model_interpretation import ModelInterpretationWriter
+from app.core.config import Config
+from app.data.feature_engineering import build_features_and_target
+from app.training.model_diagnostics import ModelDiagnosticsWriter
+from app.training.model_interpretation import ModelInterpretationWriter
 from app.models import (
     FEATURE_PREPROCESSING_VERSION,
     SGD_REGRESSION_MODEL_NAME,
@@ -28,13 +28,13 @@ from app.models import (
     model_signature,
     supports_incremental_update,
 )
-from app.dataset_loading import load_source_dataset
-from app.period_splitting import (
+from app.data.dataset_loading import load_source_dataset
+from app.data.period_splitting import (
     period_boundaries,
     rows_for_dates,
     split_date_periods,
 )
-from app.preprocessing import DataPreprocessor
+from app.data.preprocessing import DataPreprocessor
 
 
 class ModelTrainer:

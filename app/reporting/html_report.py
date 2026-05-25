@@ -8,8 +8,11 @@ import pandas as pd
 from jinja2 import Environment, select_autoescape
 from markupsafe import Markup
 
-from app.config import Config
-from app.reporting.prediction_history import generate_update_prediction_timeline
+from app.core.config import Config
+from app.reporting.prediction_history import (
+    UPDATE_PREDICTION_TIMELINE_PATH,
+    generate_update_prediction_timeline,
+)
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -249,7 +252,10 @@ def generate_html_report(config: Config) -> Path:
     data_quality_rows = read_csv(config.paths.data_quality_history_path)
     metric_rows = read_csv(config.paths.model_metrics_history_path)
     performance_rows = read_csv(config.paths.performance_history_path)
-    update_prediction_timeline_path = generate_update_prediction_timeline(config)
+    update_prediction_timeline_path = (
+        generate_update_prediction_timeline(config)
+        or reports_dir / UPDATE_PREDICTION_TIMELINE_PATH
+    )
     latest_batch = batch_rows[-1] if batch_rows else {}
     latest_quality = data_quality_rows[-1] if data_quality_rows else {}
     latest_metrics = metric_rows[-1] if metric_rows else {}
@@ -348,8 +354,7 @@ def generate_html_report(config: Config) -> Path:
         history_charts=[
             image(
                 reports_dir,
-                update_prediction_timeline_path
-                or reports_dir / "figures/history/update_prediction_timeline.svg",
+                update_prediction_timeline_path,
             ),
             image(
                 reports_dir,

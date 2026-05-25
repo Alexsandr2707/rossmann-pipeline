@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.config import Config
+from app.core.config import Config
 
 
 class DataPreprocessor:

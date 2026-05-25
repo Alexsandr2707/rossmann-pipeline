@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.config import Config
+from app.core.config import Config
 
 
 STORE_KEY = "Store"

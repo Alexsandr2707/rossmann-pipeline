@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from app.config import Config
+from app.core.config import Config
 from app.visualization import (
     write_histogram_svg,
     write_line_chart_svg,

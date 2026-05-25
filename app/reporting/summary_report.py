@@ -7,8 +7,11 @@ from typing import Any
 
 import pandas as pd
 
-from app.config import Config
-from app.reporting.prediction_history import generate_update_prediction_timeline
+from app.core.config import Config
+from app.reporting.prediction_history import (
+    UPDATE_PREDICTION_TIMELINE_PATH,
+    generate_update_prediction_timeline,
+)
 
 DEFAULT_TAIL_ROWS = 5
 SUMMARY_DIR_NAME = "summary"
@@ -23,7 +26,7 @@ def generate_summary_report(config: Config) -> Path:
     data_quality_history = _read_history(config.paths.data_quality_history_path)
     model_history = _read_history(config.paths.model_metrics_history_path)
     performance_history = _read_history(config.paths.performance_history_path)
-    update_prediction_timeline_path = generate_update_prediction_timeline(config)
+    update_prediction_timeline_path = _resolve_update_prediction_timeline(config)
 
     lines: list[str] = [
         "# Pipeline summary",
@@ -67,6 +70,13 @@ def _read_history(path: Path) -> list[dict[str, str]] | None:
     if not rows:
         return None
     return rows
+
+
+def _resolve_update_prediction_timeline(config: Config) -> Path:
+    generated_path = generate_update_prediction_timeline(config)
+    if generated_path is not None:
+        return generated_path
+    return config.paths.reports_dir / UPDATE_PREDICTION_TIMELINE_PATH
 
 
 def _latest_batch_section(
@@ -208,14 +218,16 @@ def _latest_data_quality_section(
 
 
 def _update_prediction_timeline_section(
-    timeline_path: Path | None,
+    timeline_path: Path,
     report_dir: Path,
 ) -> list[str]:
-    if timeline_path is None or not timeline_path.exists():
+    if not timeline_path.exists():
         return [
-            "No update prediction timeline is available yet.",
+            "Aggregate update prediction timeline is not available yet.",
             "",
             "Run update mode to write stream prediction CSV files.",
+            "",
+            f"- Expected file: `{_relative_path(report_dir, timeline_path)}`",
         ]
     relative_path = _relative_path(report_dir, timeline_path)
     return [

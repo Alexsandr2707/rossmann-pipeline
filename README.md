@@ -68,6 +68,52 @@ Time column: `Date`.
 
 Leakage rule: `Customers` is never used as a feature.
 
+## Project architecture
+
+The `app/` package is split by pipeline responsibility. The old flat module
+layout was hard to scan because data preparation, orchestration, training,
+serving and monitoring code lived at the same level. The new layout keeps
+modules close to the stage where they are used:
+
+```text
+app/
+  core/           # CLI-facing orchestration, config parsing and logging setup
+  data/           # source loading, stream batch collection, validation and features
+  models/         # model interfaces, sklearn implementations and preprocessing blocks
+  training/       # training/update workflow plus model diagnostics and interpretation
+  serving/        # inference-time prediction generation
+  evaluation/     # offline model evaluation workflow
+  monitoring/     # runtime operation metrics
+  reporting/      # Markdown/HTML reports and prediction history charts
+  visualization/  # reusable SVG chart writers
+```
+
+Grouping logic:
+
+- `app/core/` contains project wiring: `config.py`, `logging_utils.py` and
+  `pipeline.py`. These modules connect the CLI to the rest of the system but do
+  not own ML logic.
+- `app/data/` contains everything that prepares tabular data before modeling:
+  loading CSV sources, joining store metadata, splitting date periods,
+  collecting stream batches, checking data quality, preprocessing raw columns
+  and building features.
+- `app/models/` remains focused on reusable model building blocks: estimator
+  wrappers, factories and sklearn-compatible preprocessing transformers.
+- `app/training/` owns model lifecycle work: initial pretraining, stream
+  updates, diagnostics and model interpretation artifacts.
+- `app/serving/` owns prediction serving. It loads the trained model, applies
+  the same feature path as training and writes inference outputs.
+- `app/evaluation/` is separated from runtime training because offline
+  comparison is an analysis workflow, not part of the streaming update loop.
+- `app/monitoring/` records operation-level performance metadata that can be
+  consumed by reports.
+- `app/reporting/` and `app/visualization/` stay presentation-focused: reports
+  assemble outputs, while visualization contains reusable chart rendering.
+
+External entrypoints stay small. `run.py` parses CLI arguments, loads config
+from `app.core.config`, configures logging and delegates execution to
+`app.core.pipeline.Pipeline`.
+
 ## CLI
 
 ```bash
@@ -101,11 +147,10 @@ Evaluation outputs:
 
 `summary` writes both the Markdown summary and a browser-friendly dashboard at
 `reports/index.html`. Use `python run.py -mode summary -open` to generate it
-and open it with the default browser.
-Summary outputs include recent performance records (`inference`/`update`) and
-the active model hyperparameters from config. After stream updates are available,
-the report also includes an update-period prediction timeline that aggregates
-daily actual sales and model predictions from all update batches.
+and open it with the default browser. Summary outputs include recent
+performance records (`inference`/`update`), data quality history, model metrics
+history, the aggregate all-update prediction timeline and the active model
+hyperparameters from config.
 
 CLI commands print their primary result to stdout: `update` prints `True` or
 `False` for each executed update and then prints the refreshed Markdown report

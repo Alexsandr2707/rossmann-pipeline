@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from app.config import Config
+from app.core.config import Config
 from app.visualization import write_time_series_svg
 
 

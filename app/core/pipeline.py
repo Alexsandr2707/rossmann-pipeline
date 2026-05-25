@@ -4,8 +4,8 @@ import logging
 from collections.abc import Iterable
 from pathlib import Path
 
-from app.config import Config
-from app.performance_monitoring import PerformanceMonitor, PerformanceRecord
+from app.core.config import Config
+from app.monitoring.performance_monitoring import PerformanceMonitor, PerformanceRecord
 from app.reporting import generate_html_report, generate_summary_report
 
 
@@ -47,7 +47,7 @@ class Pipeline:
                 self.logger.info("Update completed: no new batches were available.")
                 return 0
 
-            from app.preprocessing import DataPreprocessor
+            from app.data.preprocessing import DataPreprocessor
 
             batch_path, metadata = collected
             artifact_path = batch_path
@@ -102,7 +102,7 @@ class Pipeline:
         validation = collector.validate_source_dataset()
         self.logger.info("Source dataset validation: %s", validation)
 
-        from app.preprocessing import DataPreprocessor
+        from app.data.preprocessing import DataPreprocessor
 
         raw_dataset = collector.load_sorted_source_dataset()
         if raw_dataset.empty:
@@ -146,7 +146,7 @@ class Pipeline:
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)
-        from app.prediction_serving import PredictionServing
+        from app.serving.prediction_serving import PredictionServing
 
         output_path = PredictionServing(self.config).predict_file(input_path)
         self.logger.info("Inference completed: predictions saved to %s", output_path)
@@ -273,28 +273,28 @@ class Pipeline:
 
     def _get_collector(self):
         if self.collector is None:
-            from app.data_collection import DataCollector
+            from app.data.data_collection import DataCollector
 
             self.collector = DataCollector(self.config)
         return self.collector
 
     def _get_data_quality_analyzer(self):
         if self.data_quality_analyzer is None:
-            from app.data_quality import DataQualityAnalyzer
+            from app.data.data_quality import DataQualityAnalyzer
 
             self.data_quality_analyzer = DataQualityAnalyzer(self.config)
         return self.data_quality_analyzer
 
     def _get_model_trainer(self):
         if self.model_trainer is None:
-            from app.model_training import ModelTrainer
+            from app.training.model_training import ModelTrainer
 
             self.model_trainer = ModelTrainer(self.config)
         return self.model_trainer
 
     def _get_offline_evaluator(self):
         if self.offline_evaluator is None:
-            from app.offline_evaluation import OfflineModelEvaluator
+            from app.evaluation.offline_evaluation import OfflineModelEvaluator
 
             self.offline_evaluator = OfflineModelEvaluator(self.config)
         return self.offline_evaluator
