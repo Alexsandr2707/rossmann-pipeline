@@ -527,10 +527,30 @@ class PipelineComponentTests(unittest.TestCase):
         preprocessor.fit(features)
         names = preprocessor.get_feature_names_out().tolist()
 
+        self.assertIn("categorical__StoreType", names)
+        self.assertIn("categorical__PromoInterval", names)
         self.assertIn("categorical__StoreType_frequency", names)
         self.assertIn("categorical__PromoInterval_frequency", names)
+        self.assertNotIn("categorical__0", names)
+        self.assertNotIn("categorical__1", names)
         self.assertNotIn("categorical__0_frequency", names)
         self.assertNotIn("categorical__1_frequency", names)
+
+    def test_frequency_encoder_adds_frequency_without_replacing_category_code(
+        self,
+    ) -> None:
+        features = pd.DataFrame({"StoreType": ["a", "b", "a", "c"]})
+        encoder = FrequencyEncoder()
+
+        transformed = encoder.fit_transform(features)
+
+        self.assertEqual(transformed.shape, (4, 2))
+        self.assertEqual(transformed[:, 0].tolist(), [0.0, 1.0, 0.0, 2.0])
+        self.assertEqual(transformed[:, 1].tolist(), [0.5, 0.25, 0.5, 0.25])
+        self.assertEqual(
+            encoder.get_feature_names_out().tolist(),
+            ["StoreType", "StoreType_frequency"],
+        )
 
     def test_pretrain_rejects_existing_model_files(self) -> None:
         with TemporaryDirectory() as tmp:
