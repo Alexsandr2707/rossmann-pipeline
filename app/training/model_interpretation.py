@@ -161,12 +161,11 @@ class ModelInterpretationWriter:
                     "abs_value": np.abs(importances),
                 }
             ).sort_values("abs_value", ascending=False)
-            preview = frame.head(20)
-            lines.append(preview.to_markdown(index=False, floatfmt=".6g"))
+            lines.append(frame.to_markdown(index=False, floatfmt=".6g"))
         else:
             lines.append(
-                "Interpretation values were produced, but feature names are unavailable "
-                "or have mismatched size after preprocessing."
+                "Interpretation values were produced, but feature names are "
+                "unavailable or have mismatched size after preprocessing."
             )
 
         output_path.write_text("\n".join(lines), encoding="utf-8")

@@ -80,7 +80,6 @@ Docker-only процесс подтверждается следующими run
 - `models/archive/*.pkl`
 - `artifacts/collector_state.json`
 - `artifacts/*history*.csv`
-- `reports/index.html`
 - `reports/summary_latest.md`
 
 ## Данные
@@ -146,7 +145,7 @@ app/
   serving/        # генерация inference-прогнозов
   evaluation/     # offline evaluation workflow
   monitoring/     # runtime-метрики операций
-  reporting/      # Markdown/HTML-отчеты и prediction history charts
+  reporting/      # Markdown-отчеты и prediction history charts
   visualization/  # переиспользуемые SVG chart writers
 ```
 
@@ -208,12 +207,14 @@ python run.py -mode reset
 - `reports/figures/offline_evaluation/actual_vs_prediction_timeline.svg`
 - `artifacts/offline_model_evaluation.csv`
 
-`summary` пишет Markdown summary и dashboard для браузера в
-`reports/index.html`. Команда `python run.py -mode summary -open` генерирует
-summary и открывает dashboard в браузере по умолчанию. Summary включает
+`summary` пишет Markdown summary в `reports/summary_latest.md`. Команда
+`python run.py -mode summary -open` генерирует summary и открывает Markdown
+отчет в приложении по умолчанию. Summary включает
 последние performance records (`inference`/`update`), history качества данных,
 history метрик модели, общий prediction timeline по всем update-запускам и
-активные hyperparameters модели из config.
+активные hyperparameters модели из config. Потенциально большие Markdown-таблицы
+в отчетах ограничиваются 5 строками: history показывает последние 5 записей, а
+ranked/top таблицы показывают top 5.
 
 CLI-команды печатают основной результат в stdout:
 
@@ -224,8 +225,8 @@ CLI-команды печатают основной результат в stdou
 
 Команда `python run.py -mode update 3` обрабатывает до трех stream batch-ей
 подряд. Выполнение останавливается раньше, если новых batch-ей нет. После
-завершения каждого действия pipeline Markdown summary report и HTML dashboard
-регенерируются автоматически. Актуальная summary лежит в
+завершения каждого действия pipeline Markdown summary report регенерируется
+автоматически. Актуальная summary лежит в
 `reports/summary_latest.md`, а каждая генерация дополнительно сохраняется в
 `reports/archive/summary/`.
 
@@ -290,7 +291,7 @@ Runtime `update` mode эмулирует поток данных, записыв
 - `models/archive/model_vXXXX_<model_name>.pkl`
 - `models/best_model.pkl`
 - `reports/summary_latest.md`
-- `reports/archive/summary/summary_<timestamp>_<operation>.md`
+- `reports/archive/summary/summary_<YYYY-MM-DD_HH-MM-SS>_<operation>.md`
 - `reports/model_diagnostics_latest.md`
 - `reports/figures/model/prediction_timeline.svg`
 - `models/current_model.pkl` после `pretrain` или `update`

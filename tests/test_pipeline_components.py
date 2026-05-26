@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 import unittest
 from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from textwrap import dedent
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import joblib
 import pandas as pd
@@ -24,8 +28,8 @@ from app.models.preprocessing import FrequencyEncoder, make_feature_preprocessor
 from app.monitoring.performance_monitoring import PerformanceMonitor, PerformanceRecord
 from app.serving.prediction_serving import PredictionServing
 from app.data.preprocessing import DataPreprocessor
-from app.reporting.html_report import generate_html_report
 from app.reporting.summary_report import generate_summary_report
+from run import open_report
 
 
 class PipelineComponentTests(unittest.TestCase):
@@ -68,6 +72,34 @@ class PipelineComponentTests(unittest.TestCase):
                 ).exists()
             )
             self.assertTrue((config.paths.reports_dir / "eda_latest.md").exists())
+
+    def test_data_quality_markdown_limits_large_tables_to_five_rows(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config = self._temp_config(Path(tmp))
+            dataset = self._train_dataset()
+
+            DataQualityAnalyzer(config).analyze_batch(
+                dataset,
+                {
+                    "batch_index": 1,
+                    "stream_batch_index": 1,
+                    "period_type": "stream",
+                    "batch_path": "data/raw/batch_0001.csv",
+                },
+            )
+
+            text = (config.paths.reports_dir / "eda_latest.md").read_text(
+                encoding="utf-8"
+            )
+            profile = self._markdown_section(text, "## Column profile")
+            profile_rows = [
+                line
+                for line in profile.splitlines()
+                if line.startswith("| ") and not line.startswith("| ---")
+            ]
+            self.assertEqual(len(profile_rows), 6)
+            self.assertNotIn("| Store ", profile)
+            self.assertIn("| PromoInterval ", profile)
 
     def test_transform_features_does_not_require_target_or_keep_customers(self) -> None:
         config = load_config("config/config.yaml")
@@ -209,7 +241,7 @@ class PipelineComponentTests(unittest.TestCase):
             self.assertIn("## Model hyperparameters", text)
             self.assertIn(f"- selected_model: {config.model.selected_model}", text)
 
-    def test_html_report_keeps_base_hyperparameters_without_explicit_params(
+    def test_summary_report_keeps_base_hyperparameters_without_explicit_params(
         self,
     ) -> None:
         with TemporaryDirectory() as tmp:
@@ -223,14 +255,101 @@ class PipelineComponentTests(unittest.TestCase):
             )
             config = replace(config, model=model)
 
-            report_path = generate_html_report(config)
+            report_path = generate_summary_report(config)
             text = report_path.read_text(encoding="utf-8")
             self.assertIn("selected_model", text)
             self.assertIn("training_mode", text)
             self.assertIn("update_strategy", text)
             self.assertIn("primary_metric", text)
             self.assertIn("model_without_params", text)
-            self.assertIn("No explicit parameters for selected model.", text)
+            self.assertIn("- model_parameters[model_without_params]:", text)
+            self.assertIn("  - (empty)", text)
+            self.assertFalse((config.paths.reports_dir / "index.html").exists())
+
+    def test_pipeline_summary_and_refresh_do_not_create_html_index(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config = self._temp_config(Path(tmp))
+            pipeline = Pipeline(config)
+
+            report_path = pipeline.summary()
+            refresh_path = pipeline._refresh_reports("test")
+
+            self.assertEqual(
+                report_path,
+                config.paths.reports_dir / "summary_latest.md",
+            )
+            self.assertEqual(
+                refresh_path,
+                config.paths.reports_dir / "summary_latest.md",
+            )
+            self.assertTrue(report_path.exists())
+            self.assertFalse((config.paths.reports_dir / "index.html").exists())
+
+    def test_open_report_skips_missing_wsl_tools(self) -> None:
+        with TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "summary_latest.md"
+            report_path.write_text("# Summary\n", encoding="utf-8")
+            stderr = StringIO()
+
+            with (
+                patch("run.is_wsl", return_value=True),
+                patch("run.shutil.which", return_value=None),
+                patch("run.subprocess.check_output") as check_output,
+                patch("run.subprocess.Popen") as popen,
+                patch.object(sys, "stderr", stderr),
+            ):
+                open_report(report_path)
+
+            check_output.assert_not_called()
+            popen.assert_not_called()
+            self.assertIn(
+                "Automatic report opening is unavailable", stderr.getvalue()
+            )
+            self.assertIn(str(report_path.resolve()), stderr.getvalue())
+
+    def test_summary_report_limits_history_tables_to_latest_five_rows(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config = self._temp_config(Path(tmp))
+            config.paths.performance_history_path.parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            pd.DataFrame(
+                [
+                    {
+                        "timestamp": f"2026-05-25T10:0{index}:00+00:00",
+                        "operation": f"operation_{index}",
+                        "status": "success",
+                        "duration_seconds": str(index),
+                    }
+                    for index in range(7)
+                ]
+            ).to_csv(config.paths.performance_history_path, index=False)
+            config.paths.model_metrics_history_path.parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            pd.DataFrame(
+                [
+                    {
+                        "batch_index": index,
+                        "model_name": f"model_{index}",
+                        "rmse": index,
+                        "mae": index,
+                        "r2": index,
+                    }
+                    for index in range(7)
+                ]
+            ).to_csv(config.paths.model_metrics_history_path, index=False)
+
+            text = generate_summary_report(config).read_text(encoding="utf-8")
+
+            self.assertNotIn("operation_0", text)
+            self.assertNotIn("operation_1", text)
+            self.assertIn("operation_2", text)
+            self.assertIn("operation_6", text)
+            self.assertNotIn("model_0", text)
+            self.assertNotIn("model_1", text)
+            self.assertIn("model_2", text)
+            self.assertIn("model_6", text)
 
     def test_model_interpretation_writer_uses_feature_importances(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -270,6 +389,73 @@ class PipelineComponentTests(unittest.TestCase):
             self.assertIn("abs_value |", text)
             self.assertIn("interpretation_top_features_path", output)
             self.assertTrue(Path(output["interpretation_top_features_path"]).exists())
+
+    def test_model_interpretation_report_includes_all_features(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config = self._temp_config(Path(tmp))
+            writer = ModelInterpretationWriter(config)
+            preprocessor = SimpleNamespace(
+                get_feature_names_out=lambda: [f"feature_{index}" for index in range(7)]
+            )
+            estimator = SimpleNamespace(feature_importances_=pd.Series(range(7)))
+
+            output = writer.write_model_interpretation(
+                {"model_name": "decision_tree_regression", "batch_index": 4},
+                preprocessor=preprocessor,
+                estimator=estimator,
+            )
+
+            text = Path(output["latest_interpretation_report_path"]).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("feature_6", text)
+            self.assertIn("feature_0", text)
+
+    def test_summary_report_keeps_single_top_features_table(self) -> None:
+        with TemporaryDirectory() as tmp:
+            config = self._temp_config(Path(tmp))
+            writer = ModelInterpretationWriter(config)
+            preprocessor = SimpleNamespace(
+                get_feature_names_out=lambda: [f"feature_{index}" for index in range(7)]
+            )
+            estimator = SimpleNamespace(feature_importances_=pd.Series(range(7)))
+
+            output = writer.write_model_interpretation(
+                {"model_name": "decision_tree_regression", "batch_index": 4},
+                preprocessor=preprocessor,
+                estimator=estimator,
+            )
+            config.paths.model_metrics_history_path.parent.mkdir(
+                parents=True, exist_ok=True
+            )
+            pd.DataFrame(
+                [
+                    {
+                        "batch_index": 4,
+                        "model_name": "decision_tree_regression",
+                        "interpretation_top_features_path": output[
+                            "interpretation_top_features_path"
+                        ],
+                    }
+                ]
+            ).to_csv(config.paths.model_metrics_history_path, index=False)
+
+            text = generate_summary_report(config).read_text(encoding="utf-8")
+
+            self.assertEqual(
+                len(
+                    [
+                        line
+                        for line in text.splitlines()
+                        if line.startswith("| feature ") and "abs_value" in line
+                    ]
+                ),
+                1,
+            )
+            self.assertIn("### Top features preview", text)
+            self.assertNotIn("### Top features (by absolute value)", text)
+            self.assertIn("feature_6", text)
+            self.assertNotIn("feature_0", text)
 
     def test_model_interpretation_writer_handles_unsupported_estimator(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -363,13 +549,21 @@ class PipelineComponentTests(unittest.TestCase):
         config = load_config("config/config.yaml")
         paths = replace(
             config.paths,
+            external_data_dir=root / "data" / "external",
+            raw_data_dir=root / "data" / "raw",
+            processed_data_dir=root / "data" / "processed",
             artifacts_dir=root / "artifacts",
             models_dir=root / "models",
+            logs_dir=root / "logs",
             reports_dir=root / "reports",
             predictions_dir=root / "artifacts" / "predictions",
+            collector_state_path=root / "artifacts" / "collector_state.json",
+            batch_metadata_path=root / "artifacts" / "batch_metadata_history.csv",
             data_quality_history_path=root / "artifacts" / "data_quality_history.csv",
             performance_history_path=root / "artifacts" / "performance_history.csv",
+            model_metrics_history_path=root / "artifacts" / "model_metrics_history.csv",
             best_model_path=root / "models" / "best_model.pkl",
+            pipeline_log_path=root / "logs" / "pipeline.log",
         )
         data = replace(config.data, store_path=root / "store.csv")
         return replace(config, data=data, paths=paths)
@@ -423,6 +617,13 @@ class PipelineComponentTests(unittest.TestCase):
         model = DummyRegressor(strategy="constant", constant=42.0)
         model.fit(pd.DataFrame({"feature": [0.0, 1.0]}), [42.0, 42.0])
         joblib.dump({"pipeline": model}, model_path)
+
+    def _markdown_section(self, text: str, heading: str) -> str:
+        start = text.index(heading)
+        next_heading = text.find("\n## ", start + len(heading))
+        if next_heading == -1:
+            return text[start:]
+        return text[start:next_heading]
 
 
 class ConfigLoadingTests(unittest.TestCase):

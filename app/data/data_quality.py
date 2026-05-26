@@ -9,6 +9,8 @@ import pandas as pd
 
 from app.core.config import Config
 
+MARKDOWN_TABLE_ROW_LIMIT = 5
+
 
 class DataQualityAnalyzer:
     def __init__(self, config: Config) -> None:
@@ -267,7 +269,7 @@ class DataQualityAnalyzer:
                     "unique_values": int(dataset[column].nunique(dropna=True)),
                 }
             )
-        return [self._records_to_markdown(rows)]
+        return [self._records_to_markdown(rows[-MARKDOWN_TABLE_ROW_LIMIT:])]
 
     def _mapping_table(
         self,
@@ -279,6 +281,7 @@ class DataQualityAnalyzer:
             return ["No values available."]
 
         rows = [{key_name: key, value_name: value} for key, value in values.items()]
+        rows = rows[-MARKDOWN_TABLE_ROW_LIMIT:]
         return [self._records_to_markdown(rows)]
 
     def _serialize_metrics(self, metrics: dict[str, Any]) -> dict[str, Any]:

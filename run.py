@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import subprocess
 import sys
-import webbrowser
 from pathlib import Path
 
 
@@ -34,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-open",
         action="store_true",
-        help="Open the generated HTML dashboard after summary mode.",
+        help="Open the generated Markdown summary after summary mode.",
     )
     return parser.parse_args()
 
@@ -83,9 +84,8 @@ def main() -> int:
         else:
             report_path = pipeline.summary()
             print(report_path)
-            dashboard_path = config.paths.reports_dir / "index.html"
             if args.open:
-                open_report(dashboard_path)
+                open_report(report_path)
     except (FileExistsError, NotImplementedError) as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -96,7 +96,7 @@ def open_report(path: Path) -> None:
     full_path = path.resolve()
     try:
         # open the file in the default application
-        if is_wsl():
+        if is_wsl() and shutil.which("wslpath") and shutil.which("cmd.exe"):
             windows_path = subprocess.check_output(
                 ["wslpath", "-w", str(full_path)],
                 text=True,
@@ -108,9 +108,26 @@ def open_report(path: Path) -> None:
             )
             return
 
-        webbrowser.open(full_path.as_uri())
+        if sys.platform == "win32":
+            os.startfile(full_path)  # type: ignore[attr-defined]
+            return
+
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        if shutil.which(opener) is None:
+            print(
+                "Automatic report opening is unavailable in this environment.",
+                file=sys.stderr,
+            )
+            print(f"Open this file manually: {full_path}", file=sys.stderr)
+            return
+
+        subprocess.Popen(
+            [opener, str(full_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except OSError as error:
-        print(f"Could not open browser automatically: {error}", file=sys.stderr)
+        print(f"Could not open report automatically: {error}", file=sys.stderr)
         print(f"Open this file manually: {full_path}", file=sys.stderr)
 
 
