@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge, SGDRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.tree import DecisionTreeRegressor
@@ -12,6 +13,10 @@ class RefitDecisionTreeRegressor(RefitUpdateMixin, DecisionTreeRegressor):
 
 
 class RefitKNeighborsRegressor(RefitUpdateMixin, KNeighborsRegressor):
+    pass
+
+
+class RefitRandomForestRegressor(RefitUpdateMixin, RandomForestRegressor):
     pass
 
 

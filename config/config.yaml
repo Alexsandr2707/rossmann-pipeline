@@ -8,9 +8,6 @@ data:
   store_path: data/external/store.csv
   time_column: Date
   target_column: Sales
-  min_rows: 10000
-  min_features: 10
-  min_categorical_features: 2
 
 target_preprocessing:
   missing_strategy: drop
@@ -74,13 +71,18 @@ model:
   pretrain_mark_collector_state: true
   candidate_models:
     - decision_tree_regression
+    - random_forest_regression
     - knn_regression
     - ridge_regression
-    - sgd_regression
 
 model_parameters:
   decision_tree_regression:
-    min_samples_leaf: 20
+    min_samples_leaf: 10
+  random_forest_regression:
+    n_estimators: 100
+    max_depth: 20
+    min_samples_leaf: 10
+    n_jobs: -1
   knn_regression:
     n_neighbors: 8
     weights: distance

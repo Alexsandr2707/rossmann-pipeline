@@ -5,13 +5,14 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from app.core.config import Config
 from app.data.dataset_loading import load_source_dataset
 from app.data.feature_engineering import build_features_and_target
+from app.evaluation.regression_metrics import calculate_regression_metrics
 from app.training.model_training import ModelTrainer
 from app.models import canonical_model_name
+from app.models.prediction_postprocessing import non_negative_predictions
 from app.data.period_splitting import (
     DatePeriodSplit,
     rows_for_dates,
@@ -120,11 +121,7 @@ class OfflineModelEvaluator:
         y_valid: pd.Series,
     ) -> tuple[dict[str, Any], np.ndarray]:
         pipeline = self.trainer.fit_pipeline(x_train, y_train, model_name)
-        predictions = np.clip(
-            np.asarray(pipeline.predict(x_valid), dtype=float),
-            0.0,
-            None,
-        )
+        predictions = non_negative_predictions(pipeline.predict(x_valid))
         row = self._regression_metrics(model_name, y_valid, predictions)
         row["notes"] = "Project regression model; Customers is excluded from features."
         return row, predictions
@@ -203,55 +200,12 @@ class OfflineModelEvaluator:
         y_true: pd.Series,
         predictions: np.ndarray,
     ) -> dict[str, Any]:
-        y_true_array = y_true.to_numpy(dtype=float)
-        predictions = np.asarray(predictions, dtype=float)
-        return {
-            "model_name": model_name,
-            "rmse": float(np.sqrt(mean_squared_error(y_true_array, predictions))),
-            "mae": float(mean_absolute_error(y_true_array, predictions)),
-            "r2": float(r2_score(y_true_array, predictions)),
-            "smape": self._smape(y_true_array, predictions),
-            "target_mean": float(y_true_array.mean()),
-            "prediction_mean": float(predictions.mean()),
-            "prediction_min": float(predictions.min()),
-            "prediction_max": float(predictions.max()),
-            "actual_zero_rate": float((y_true_array == 0).mean()),
-            "prediction_zero_rate": float((predictions <= 0).mean()),
-            **self._top_actual_mse_shares(y_true_array, predictions),
-        }
-
-    def _top_actual_mse_shares(
-        self,
-        y_true: np.ndarray,
-        predictions: np.ndarray,
-    ) -> dict[str, float]:
-        squared_error = np.square(predictions - y_true)
-        total_squared_error = float(squared_error.sum())
-        if np.isclose(total_squared_error, 0.0):
-            return {
-                "top_10_actual_mse_share": 0.0,
-                "top_100_actual_mse_share": 0.0,
-                "top_500_actual_mse_share": 0.0,
-            }
-
-        descending_actual_indices = np.argsort(-y_true)
-        shares = {}
-        for top_n in (10, 100, 500):
-            top_indices = descending_actual_indices[: min(top_n, len(y_true))]
-            shares[f"top_{top_n}_actual_mse_share"] = float(
-                squared_error[top_indices].sum() / total_squared_error
-            )
-        return shares
-
-    def _smape(self, y_true: np.ndarray, predictions: np.ndarray) -> float:
-        denominator = np.abs(y_true) + np.abs(predictions)
-        smape_values = np.divide(
-            2.0 * np.abs(predictions - y_true),
-            denominator,
-            out=np.zeros_like(predictions, dtype=float),
-            where=denominator != 0,
+        metrics = calculate_regression_metrics(
+            y_true,
+            predictions,
+            include_prediction_range=True,
         )
-        return float(smape_values.mean())
+        return {"model_name": model_name, **metrics}
 
     def _write_report(
         self,

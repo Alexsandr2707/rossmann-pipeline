@@ -9,9 +9,11 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import matplotlib
 import numpy as np
 
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # faster, disable plt.show
 
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 FIGURE_SIZE = (9.0, 5.0)
 COLORS = ("tab:blue", "tab:red", "tab:green", "tab:purple", "tab:orange")
@@ -127,7 +129,7 @@ def write_time_series_svg(
     _save_figure(figure, path)
 
 
-def _new_figure(title: str, x_label: str, y_label: str) -> tuple[plt.Figure, plt.Axes]:
+def _new_figure(title: str, x_label: str, y_label: str) -> tuple[Figure, Axes]:
     figure, axis = plt.subplots(figsize=FIGURE_SIZE)
     axis.set_title(title)
     axis.set_xlabel(x_label)
@@ -137,7 +139,7 @@ def _new_figure(title: str, x_label: str, y_label: str) -> tuple[plt.Figure, plt
     return figure, axis
 
 
-def _save_figure(figure: plt.Figure, path: Path) -> None:
+def _save_figure(figure: Figure, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     figure.tight_layout()
     figure.savefig(path, format="svg", bbox_inches="tight")
@@ -184,7 +186,7 @@ def _clean_time_series(
 
 
 def _set_series_limits(
-    axis: plt.Axes,
+    axis: Axes,
     series_by_label: dict[str, tuple[np.ndarray, np.ndarray]],
 ) -> None:
     all_x = np.concatenate([series[0] for series in series_by_label.values()])

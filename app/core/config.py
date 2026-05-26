@@ -6,6 +6,8 @@ from typing import Any
 
 import yaml
 
+from app.models.factory import MODEL_NAMES, canonical_model_name
+
 
 @dataclass(frozen=True)
 class ProjectConfig:
@@ -19,9 +21,6 @@ class DataConfig:
     store_path: Path | None
     time_column: str
     target_column: str
-    min_rows: int
-    min_features: int
-    min_categorical_features: int
 
 
 @dataclass(frozen=True)
@@ -97,6 +96,18 @@ def _path(value: str) -> Path:
     return Path(value)
 
 
+def _bool(value: Any, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1"}:
+            return True
+        if normalized in {"false", "no", "0"}:
+            return False
+    raise ValueError(f"{field_name} must be a boolean.")
+
+
 def load_config(path: str | Path) -> Config:
     config_path = Path(path)
     with config_path.open("r", encoding="utf-8") as file:
@@ -111,6 +122,12 @@ def load_config(path: str | Path) -> Config:
     data_schema = _require_section(raw, "data_schema")
     paths = _require_section(raw, "paths")
     model = _require_section(raw, "model")
+    model_parameters = _model_parameters(raw.get("model_parameters", {}))
+
+    target_missing_strategy = str(target_preprocessing["missing_strategy"])
+    _validate_target_preprocessing(target_missing_strategy)
+
+    model_values = _validated_model_values(model)
 
     return Config(
         project=ProjectConfig(
@@ -122,14 +139,14 @@ def load_config(path: str | Path) -> Config:
             store_path=_path(data["store_path"]) if data.get("store_path") else None,
             time_column=str(data["time_column"]),
             target_column=str(data["target_column"]),
-            min_rows=int(data["min_rows"]),
-            min_features=int(data["min_features"]),
-            min_categorical_features=int(data["min_categorical_features"]),
         ),
         target_preprocessing=TargetPreprocessingConfig(
-            missing_strategy=str(target_preprocessing["missing_strategy"]),
+            missing_strategy=target_missing_strategy,
             missing_fill_value=float(target_preprocessing["missing_fill_value"]),
-            add_missing_indicator=bool(target_preprocessing["add_missing_indicator"]),
+            add_missing_indicator=_bool(
+                target_preprocessing["add_missing_indicator"],
+                "target_preprocessing.add_missing_indicator",
+            ),
             missing_indicator_suffix=str(
                 target_preprocessing["missing_indicator_suffix"]
             ),
@@ -173,24 +190,105 @@ def load_config(path: str | Path) -> Config:
             pipeline_log_path=_path(paths["pipeline_log_path"]),
         ),
         model=ModelConfig(
-            primary_metric=str(model["primary_metric"]),
-            candidate_models=tuple(model["candidate_models"]),
-            training_mode=str(model.get("training_mode", "all")),
-            selected_model=str(
-                model.get("selected_model", model["candidate_models"][0])
-            ),
-            update_strategy=str(model.get("update_strategy", "full_refit")),
-            stream_batch_days=int(model.get("stream_batch_days", 7)),
-            initial_train_ratio=float(model.get("initial_train_ratio", 0.50)),
-            validation_ratio=float(model.get("validation_ratio", 0.20)),
-            stream_ratio=float(model.get("stream_ratio", 0.30)),
-            rolling_train_period_days=int(model.get("rolling_train_period_days", 365)),
-            pretrain_mark_collector_state=bool(
-                model.get("pretrain_mark_collector_state", True)
-            ),
-            model_parameters=_model_parameters(raw.get("model_parameters", {})),
+            primary_metric=model_values["primary_metric"],
+            candidate_models=model_values["candidate_models"],
+            training_mode=model_values["training_mode"],
+            selected_model=model_values["selected_model"],
+            update_strategy=model_values["update_strategy"],
+            stream_batch_days=model_values["stream_batch_days"],
+            initial_train_ratio=model_values["initial_train_ratio"],
+            validation_ratio=model_values["validation_ratio"],
+            stream_ratio=model_values["stream_ratio"],
+            rolling_train_period_days=model_values["rolling_train_period_days"],
+            pretrain_mark_collector_state=model_values["pretrain_mark_collector_state"],
+            model_parameters=model_parameters,
         ),
     )
+
+
+def _validate_target_preprocessing(missing_strategy: str) -> None:
+    allowed = {"drop", "fill_zero", "fill_value", "keep"}
+    if missing_strategy not in allowed:
+        raise ValueError(
+            "target_preprocessing.missing_strategy must be one of "
+            f"{sorted(allowed)}."
+        )
+
+
+def _validated_model_values(model: dict[str, Any]) -> dict[str, Any]:
+    primary_metric = str(model["primary_metric"])
+    allowed_primary_metrics = {"rmse", "mae", "smape"}
+    if primary_metric not in allowed_primary_metrics:
+        raise ValueError(
+            f"primary_metric must be one of {sorted(allowed_primary_metrics)}."
+        )
+
+    candidate_models_raw = model.get("candidate_models")
+    if (
+        not isinstance(candidate_models_raw, (list, tuple))
+        or len(candidate_models_raw) == 0
+    ):
+        raise ValueError("candidate_models must not be empty.")
+    candidate_models = tuple(str(item) for item in candidate_models_raw)
+    canonical_candidates = tuple(
+        canonical_model_name(item) for item in candidate_models
+    )
+    for model_name in canonical_candidates:
+        if model_name not in MODEL_NAMES:
+            raise ValueError(
+                f"candidate_models contains unsupported model: {model_name}"
+            )
+
+    training_mode = str(model.get("training_mode", "all"))
+    if training_mode not in {"all", "single"}:
+        raise ValueError("training_mode must be 'all' or 'single'.")
+
+    selected_model = str(model.get("selected_model", candidate_models[0]))
+    canonical_selected_model = canonical_model_name(selected_model)
+    if canonical_selected_model not in canonical_candidates:
+        raise ValueError(
+            f"selected_model must be listed in candidate_models: {selected_model}"
+        )
+
+    update_strategy = str(model.get("update_strategy", "full_refit"))
+    if update_strategy not in {"full_refit", "rolling_refit", "incremental"}:
+        raise ValueError(
+            "update_strategy must be one of "
+            "['full_refit', 'incremental', 'rolling_refit']."
+        )
+
+    stream_batch_days = int(model.get("stream_batch_days", 7))
+    if stream_batch_days <= 0:
+        raise ValueError("stream_batch_days must be positive.")
+
+    rolling_train_period_days = int(model.get("rolling_train_period_days", 365))
+    if rolling_train_period_days <= 0:
+        raise ValueError("rolling_train_period_days must be positive.")
+
+    initial_train_ratio = float(model.get("initial_train_ratio", 0.50))
+    validation_ratio = float(model.get("validation_ratio", 0.20))
+    stream_ratio = float(model.get("stream_ratio", 0.30))
+    if initial_train_ratio <= 0 or validation_ratio <= 0 or stream_ratio <= 0:
+        raise ValueError("split ratios must be positive.")
+    if initial_train_ratio + validation_ratio >= 1.0:
+        raise ValueError("split ratios must leave a stream period.")
+
+    return {
+        "primary_metric": primary_metric,
+        "candidate_models": candidate_models,
+        "training_mode": training_mode,
+        "selected_model": selected_model,
+        "update_strategy": update_strategy,
+        "stream_batch_days": stream_batch_days,
+        "initial_train_ratio": initial_train_ratio,
+        "validation_ratio": validation_ratio,
+        "stream_ratio": stream_ratio,
+        "rolling_train_period_days": rolling_train_period_days,
+        "pretrain_mark_collector_state": _bool(
+            model.get("pretrain_mark_collector_state", True),
+            "pretrain_mark_collector_state",
+        ),
+    }
 
 
 def _model_parameters(raw: Any) -> dict[str, dict[str, Any]]:

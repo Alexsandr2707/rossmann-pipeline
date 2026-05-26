@@ -31,15 +31,18 @@ class Pipeline:
         error_message: str | None = None
         collector = self._get_collector()
         try:
-            validation = collector.validate_source_dataset()
-            self.logger.info("Source dataset validation: %s", validation)
-
             model_trainer = self._get_model_trainer()
             if not model_trainer.current_model_path.exists():
                 self.logger.info(
                     "Current model is missing. Running pretrain before stream update."
                 )
                 self.pretrain()
+            elif not model_trainer.has_compatible_current_model():
+                raise ValueError(
+                    "Current model is incompatible with the selected model, "
+                    "feature preprocessing version, or model signature. "
+                    "Run reset/retrain before updating."
+                )
 
             collected = collector.collect_next_stream_batch()
             if collected is None:
@@ -72,6 +75,7 @@ class Pipeline:
                 raw_batch_path=batch_path,
                 batch_metadata=metadata,
             )
+            collector.commit_stream_batch(metadata)
             status = "success"
             self.logger.info("Updated model saved to %s", model_path)
             self.logger.info("Stream update metrics: %s", model_metrics)

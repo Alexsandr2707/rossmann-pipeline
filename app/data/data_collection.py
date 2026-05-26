@@ -86,11 +86,6 @@ class DataCollector:
                 **period_boundaries(split),
             }
         )
-        self._append_metadata(metadata)
-
-        state.stream_batch_index += 1
-        state.period_boundaries = period_boundaries(split)
-        self._save_state(state)
 
         self.logger.info(
             "Collected stream batch %s with %s rows across %s dates",
@@ -99,6 +94,24 @@ class DataCollector:
             len(batch_dates),
         )
         return batch_path, metadata
+
+    def commit_stream_batch(self, metadata: dict[str, Any]) -> CollectorState:
+        state = self._load_state()
+        stream_batch_index = int(metadata["stream_batch_index"])
+        if state.stream_batch_index == stream_batch_index + 1:
+            return state
+        if state.stream_batch_index != stream_batch_index:
+            raise ValueError(
+                "Cannot commit stream batch out of order: "
+                f"state_index={state.stream_batch_index} "
+                f"metadata_index={stream_batch_index}"
+            )
+
+        self._append_metadata(metadata)
+        state.stream_batch_index += 1
+        state.period_boundaries = self._metadata_period_boundaries(metadata)
+        self._save_state(state)
+        return state
 
     def validate_source_dataset(self) -> dict[str, Any]:
         dataset = self._load_dataset()
@@ -113,10 +126,6 @@ class DataCollector:
             "has_time_column": self.config.data.time_column in dataset.columns,
             "has_target_column": self.config.data.target_column in dataset.columns,
             "missing_part": float(dataset.isna().mean().mean()),
-            "meets_min_rows": len(dataset) >= self.config.data.min_rows,
-            "meets_min_features": dataset.shape[1] >= self.config.data.min_features,
-            "meets_min_categorical_features": categorical_count
-            >= self.config.data.min_categorical_features,
         }
 
     def _load_dataset(self) -> pd.DataFrame:
@@ -221,3 +230,17 @@ class DataCollector:
             header=not metadata_path.exists(),
             index=False,
         )
+
+    def _metadata_period_boundaries(self, metadata: dict[str, Any]) -> dict[str, Any]:
+        boundary_keys = (
+            "initial_date_min",
+            "initial_date_max",
+            "initial_date_count",
+            "validation_date_min",
+            "validation_date_max",
+            "validation_date_count",
+            "stream_date_min",
+            "stream_date_max",
+            "stream_date_count",
+        )
+        return {key: metadata[key] for key in boundary_keys if key in metadata}

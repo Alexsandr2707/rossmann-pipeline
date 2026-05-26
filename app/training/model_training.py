@@ -7,16 +7,12 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-)
 from sklearn.pipeline import Pipeline as SklearnPipeline
 from scipy.stats import pearsonr
 
 from app.core.config import Config
 from app.data.feature_engineering import build_features_and_target
+from app.evaluation.regression_metrics import calculate_regression_metrics
 from app.training.model_diagnostics import ModelDiagnosticsWriter
 from app.training.model_interpretation import ModelInterpretationWriter
 from app.models import (
@@ -28,6 +24,7 @@ from app.models import (
     model_signature,
     supports_incremental_update,
 )
+from app.models.prediction_postprocessing import non_negative_predictions
 from app.data.dataset_loading import load_source_dataset
 from app.data.period_splitting import (
     period_boundaries,
@@ -94,11 +91,6 @@ class ModelTrainer:
             self.config.data.time_column,
             split.validation_dates,
         )
-        start_dataset = rows_for_dates(
-            dataset,
-            self.config.data.time_column,
-            split.initial_dates.append(split.validation_dates),
-        )
         x_train, y_train = self._build_features_and_target(initial_dataset)
         x_valid, y_valid = self._build_features_and_target(validation_dataset)
         valid_dates = self.target_dates(validation_dataset)
@@ -107,11 +99,11 @@ class ModelTrainer:
             raise ValueError("Not enough rows for model pretraining.")
 
         results: list[dict[str, Any]] = []
-        refitted_models: dict[str, SklearnPipeline] = {}
+        evaluated_models: dict[str, SklearnPipeline] = {}
 
         for model_name in self._models_to_train():
             pipeline = self.fit_pipeline(x_train, y_train, model_name)
-            predictions = pipeline.predict(x_valid)
+            predictions = non_negative_predictions(pipeline.predict(x_valid))
             x_valid_transformed = pipeline.named_steps["preprocessor"].transform(
                 x_valid
             )
@@ -169,21 +161,14 @@ class ModelTrainer:
                 )
             )
             results.append(metrics)
-            start_features, start_target = self._build_features_and_target(
-                start_dataset
-            )
-            refitted_models[model_name] = self.fit_pipeline(
-                start_features,
-                start_target,
-                model_name,
-            )
+            evaluated_models[model_name] = pipeline
 
         best_metrics = min(
             results,
             key=lambda item: item[self.config.model.primary_metric],
         )
         best_model_name = str(best_metrics["model_name"])
-        best_pipeline = refitted_models[best_model_name]
+        best_pipeline = evaluated_models[best_model_name]
 
         model_path = self._save_model_version(best_pipeline, best_metrics)
         self._save_current_model(
@@ -206,6 +191,12 @@ class ModelTrainer:
             raise FileNotFoundError(
                 f"Current model not found: {self.current_model_path}. Run pretrain first."
             )
+        if not self.has_compatible_current_model():
+            raise ValueError(
+                "Current model is incompatible with the selected model, feature "
+                "preprocessing version, or model signature. Reset/retrain before "
+                "updating."
+            )
 
         payload = joblib.load(self.current_model_path)
         pipeline = payload["pipeline"]
@@ -219,7 +210,7 @@ class ModelTrainer:
         batch = self._load_processed_batch(latest_processed_path)
         features, target = self._build_features_and_target(batch)
         dates = self.target_dates(batch)
-        predictions = pipeline.predict(features)
+        predictions = non_negative_predictions(pipeline.predict(features))
         transformed_features = pipeline.named_steps["preprocessor"].transform(features)
         metrics = self._calculate_metrics(
             target,
@@ -471,37 +462,21 @@ class ModelTrainer:
         estimator: Any | None = None,
         transformed_features: Any | None = None,
     ) -> dict[str, Any]:
-        predictions = np.asarray(predictions, dtype=float)
-        rmse = np.sqrt(mean_squared_error(y_true, predictions))
-        mae = mean_absolute_error(y_true, predictions)
-        r2 = r2_score(y_true, predictions)
+        predictions = non_negative_predictions(predictions)
         y_true_array = y_true.to_numpy()
         pearson_corr, pearson_p_value = self._pearson_metrics(
             y_true_array,
             predictions,
         )
-        metrics: dict[str, Any] = {
-            "rmse": float(rmse),
-            "mae": float(mae),
-            "r2": float(r2),
-            "smape": self._smape(y_true_array, predictions),
-            "pearson_corr": pearson_corr,
-            "pearson_p_value": pearson_p_value,
-            "prediction_mean": float(predictions.mean()),
-            "target_mean": float(y_true_array.mean()),
-        }
+        metrics = calculate_regression_metrics(
+            y_true,
+            predictions,
+            include_prediction_range=False,
+        )
+        metrics["pearson_corr"] = pearson_corr
+        metrics["pearson_p_value"] = pearson_p_value
 
         return metrics
-
-    def _smape(self, y_true: np.ndarray, predictions: np.ndarray) -> float:
-        denominator = np.abs(y_true) + np.abs(predictions)
-        smape_values = np.divide(
-            2.0 * np.abs(predictions - y_true),
-            denominator,
-            out=np.zeros_like(predictions, dtype=float),
-            where=denominator != 0,
-        )
-        return float(smape_values.mean())
 
     def _pearson_metrics(
         self,
@@ -514,7 +489,7 @@ class ModelTrainer:
             return None, None
 
         result = pearsonr(y_true, predictions)
-        return float(result.statistic), float(result.pvalue)
+        return float(result.statistic), float(result.pvalue)  # type: ignore
 
     def _save_model_version(
         self,
@@ -534,6 +509,7 @@ class ModelTrainer:
             {
                 "pipeline": pipeline,
                 "metrics": metrics,
+                "model_name": canonical_model_name(str(metrics["model_name"])),
                 "feature_preprocessing_version": FEATURE_PREPROCESSING_VERSION,
                 "model_signature": self._model_signature(str(metrics["model_name"])),
             },
@@ -551,6 +527,7 @@ class ModelTrainer:
             "pipeline": pipeline,
             "metrics": metrics,
             "model_path": str(model_path),
+            "model_name": canonical_model_name(str(metrics["model_name"])),
             "feature_preprocessing_version": FEATURE_PREPROCESSING_VERSION,
             "model_signature": self._model_signature(str(metrics["model_name"])),
         }

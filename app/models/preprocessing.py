@@ -31,10 +31,7 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         for column in self.feature_names_in_:
             categories = pd.unique(data[column])
             self.category_maps_.append(
-                {
-                    category: float(index)
-                    for index, category in enumerate(categories)
-                }
+                {category: float(index) for index, category in enumerate(categories)}
             )
             frequencies = data[column].value_counts(normalize=True, dropna=False)
             self.frequency_maps_.append(

@@ -1,7 +1,5 @@
 """Core orchestration, configuration and logging utilities."""
 
-from __future__ import annotations
-
 from importlib import import_module
 from typing import Any
 
@@ -18,7 +16,7 @@ _EXPORTS = {
     "load_config": "app.core.config",
 }
 
-__all__ = sorted(_EXPORTS)
+__all__ = sorted(_EXPORTS)  # type: ignore
 
 
 def __getattr__(name: str) -> Any:

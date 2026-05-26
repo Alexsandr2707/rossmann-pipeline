@@ -19,7 +19,7 @@ class RefitUpdateMixin:
     supports_incremental_update = False
 
     def update(self, x: Any, y: Any) -> Any:
-        return self.fit(x, y)
+        return self.fit(x, y)  # type: ignore
 
 
 class PartialFitUpdateMixin:

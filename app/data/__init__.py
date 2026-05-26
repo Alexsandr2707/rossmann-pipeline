@@ -23,7 +23,7 @@ _EXPORTS = {
     "stream_date_batch": "app.data.period_splitting",
 }
 
-__all__ = sorted(_EXPORTS)
+__all__ = sorted(_EXPORTS)  # type: ignore
 
 
 def __getattr__(name: str) -> Any:

@@ -11,7 +11,7 @@ _EXPORTS = {
     "ModelTrainer": "app.training.model_training",
 }
 
-__all__ = sorted(_EXPORTS)
+__all__ = sorted(_EXPORTS)  # type: ignore
 
 
 def __getattr__(name: str) -> Any:

@@ -9,7 +9,7 @@ _EXPORTS = {
     "PredictionServing": "app.serving.prediction_serving",
 }
 
-__all__ = sorted(_EXPORTS)
+__all__ = sorted(_EXPORTS)  # type: ignore
 
 
 def __getattr__(name: str) -> Any:

@@ -12,6 +12,12 @@ from app.data.dataset_loading import merge_store_metadata
 from app.data.feature_engineering import build_features
 from app.monitoring.performance_monitoring import PerformanceMonitor, PerformanceRecord
 from app.data.preprocessing import DataPreprocessor
+from app.models import (
+    FEATURE_PREPROCESSING_VERSION,
+    canonical_model_name,
+    model_signature,
+)
+from app.models.prediction_postprocessing import non_negative_predictions
 
 
 class PredictionServing:
@@ -43,7 +49,7 @@ class PredictionServing:
 
             features = build_features(processed, self.config)
             model = self._load_model()
-            predictions = model.predict(features)
+            predictions = non_negative_predictions(model.predict(features))
 
             output = raw_input.copy()
             output["predict"] = predictions
@@ -90,8 +96,51 @@ class PredictionServing:
 
         payload = joblib.load(model_path)
         if isinstance(payload, dict) and "pipeline" in payload:
+            error = self._model_compatibility_error(payload)
+            if error is not None:
+                raise ValueError(f"Best model is incompatible: {error}. Reset/retrain.")
             return payload["pipeline"]
-        return payload
+        raise ValueError(
+            "Best model is incompatible: missing model payload metadata. Reset/retrain."
+        )
+
+    def _model_compatibility_error(self, payload: dict[str, Any]) -> str | None:
+        expected_model_name = canonical_model_name(self.config.model.selected_model)
+        payload_model_name = payload.get("model_name")
+        if payload_model_name is None and isinstance(payload.get("metrics"), dict):
+            payload_model_name = payload["metrics"].get("model_name")
+        if canonical_model_name(str(payload_model_name)) != expected_model_name:
+            return (
+                f"model_name={payload_model_name!r}, "
+                f"expected {expected_model_name!r}"
+            )
+
+        version = payload.get("feature_preprocessing_version")
+        if version != FEATURE_PREPROCESSING_VERSION:
+            return (
+                f"feature_preprocessing_version={version!r}, "
+                f"expected {FEATURE_PREPROCESSING_VERSION!r}"
+            )
+
+        signature = payload.get("model_signature")
+        expected_signature = model_signature(
+            expected_model_name,
+            self._model_parameters(expected_model_name),
+        )
+        if signature != expected_signature:
+            return "model_signature does not match selected model configuration"
+
+        return None
+
+    def _model_parameters(self, model_name: str) -> dict[str, Any]:
+        canonical_name = canonical_model_name(model_name)
+        parameters = self.config.model.model_parameters
+        if canonical_name in parameters:
+            return dict(parameters[canonical_name])
+        for configured_name, configured_parameters in parameters.items():
+            if canonical_model_name(configured_name) == canonical_name:
+                return dict(configured_parameters)
+        return {}
 
     def _next_output_path(self) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

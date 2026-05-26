@@ -6,22 +6,26 @@ from app.models.sklearn_regression import (
     PartialFitSGDRegressor,
     RefitDecisionTreeRegressor,
     RefitKNeighborsRegressor,
+    RefitRandomForestRegressor,
     RefitRidgeRegressor,
 )
 
 DECISION_TREE_REGRESSION_MODEL_NAME = "decision_tree_regression"
 KNN_REGRESSION_MODEL_NAME = "knn_regression"
+RANDOM_FOREST_REGRESSION_MODEL_NAME = "random_forest_regression"
 RIDGE_REGRESSION_MODEL_NAME = "ridge_regression"
 SGD_REGRESSION_MODEL_NAME = "sgd_regression"
 MODEL_ALIASES: dict[str, str] = {
     "decision_tree": DECISION_TREE_REGRESSION_MODEL_NAME,
     "knn": KNN_REGRESSION_MODEL_NAME,
+    "random_forest": RANDOM_FOREST_REGRESSION_MODEL_NAME,
     "ridge": RIDGE_REGRESSION_MODEL_NAME,
     "sgd": SGD_REGRESSION_MODEL_NAME,
 }
 MODEL_NAMES = {
     DECISION_TREE_REGRESSION_MODEL_NAME,
     KNN_REGRESSION_MODEL_NAME,
+    RANDOM_FOREST_REGRESSION_MODEL_NAME,
     RIDGE_REGRESSION_MODEL_NAME,
     SGD_REGRESSION_MODEL_NAME,
 }
@@ -43,6 +47,8 @@ def make_model(
         return RefitDecisionTreeRegressor(**_with_random_state(parameters, random_seed))
     if name == KNN_REGRESSION_MODEL_NAME:
         return RefitKNeighborsRegressor(**parameters)
+    if name == RANDOM_FOREST_REGRESSION_MODEL_NAME:
+        return RefitRandomForestRegressor(**_with_random_state(parameters, random_seed))
     if name == RIDGE_REGRESSION_MODEL_NAME:
         return RefitRidgeRegressor(**parameters)
     if name == SGD_REGRESSION_MODEL_NAME:
