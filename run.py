@@ -71,7 +71,7 @@ def main() -> int:
             for _ in range(update_count):
                 updated = bool(pipeline.update())
                 print(updated)
-                print(pipeline.summary())
+                print(config.paths.reports_dir / "summary_latest.md")
                 if not updated:
                     break
         elif args.mode == "pretrain":

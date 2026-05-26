@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -19,9 +20,18 @@ class DataQualityAnalyzer:
         batch_metadata: Mapping[str, Any],
     ) -> dict[str, Any]:
         batch_index = self._batch_index(batch_metadata)
-        report_path = self.config.paths.reports_dir / f"eda_batch_{batch_index:04d}.md"
+        report_path = (
+            self.config.paths.reports_dir
+            / "archive"
+            / "eda"
+            / f"eda_batch_{batch_index:04d}.md"
+        )
+        latest_report_path = self.config.paths.reports_dir / "eda_latest.md"
         metrics = self._calculate_metrics(dataset, batch_metadata, report_path)
+        metrics["latest_eda_report_path"] = str(latest_report_path)
         self._write_markdown_report(dataset, batch_metadata, metrics, report_path)
+        latest_report_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(report_path, latest_report_path)
         self._append_history(metrics)
         return metrics
 

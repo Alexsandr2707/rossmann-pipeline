@@ -37,6 +37,7 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         encoded_columns = []
         for index, column in enumerate(self.feature_names_in_):
             encoded = data[column].map(self.frequency_maps_[index])
+            # encoded_columns.append(data[column].fillna(self.unknown_value).to_numpy())
             encoded_columns.append(encoded.fillna(self.unknown_value).to_numpy())
         return np.column_stack(encoded_columns)
 

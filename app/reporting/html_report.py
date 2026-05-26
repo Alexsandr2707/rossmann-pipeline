@@ -461,7 +461,8 @@ def generate_html_report(config: Config) -> Path:
             ),
         ],
         file_links=[
-            link(reports_dir, reports_dir / "summary/summary_latest.md"),
+            link(reports_dir, reports_dir / "summary_latest.md"),
+            link(reports_dir, reports_dir / "eda_latest.md"),
             link(reports_dir, reports_dir / "model_diagnostics_latest.md"),
             link(reports_dir, reports_dir / "model_interpretation_latest.md"),
             link(reports_dir, config.paths.batch_metadata_path),

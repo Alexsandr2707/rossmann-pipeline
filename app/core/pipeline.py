@@ -95,6 +95,8 @@ class Pipeline:
                 ),
                 start_time=start_time,
             )
+            if status == "success":
+                self._refresh_reports("update")
 
     def pretrain(self) -> Path:
         self.logger.info("Pretrain mode requested")
@@ -148,6 +150,7 @@ class Pipeline:
 
         self.logger.info("Pretrain model saved to %s", model_path)
         self.logger.info("Pretrain metrics: %s", model_metrics)
+        self._refresh_reports("pretrain")
         return model_path
 
     def _read_batch(self, batch_path: Path):
@@ -159,7 +162,7 @@ class Pipeline:
         models_dir = self.config.paths.models_dir
         if not models_dir.exists():
             return []
-        return sorted(path for path in models_dir.glob("*.pkl") if path.is_file())
+        return sorted(path for path in models_dir.rglob("*.pkl") if path.is_file())
 
     def inference(self, input_path: Path) -> Path:
         self.logger.info("Inference mode requested for %s", input_path)
@@ -167,11 +170,12 @@ class Pipeline:
 
         output_path = PredictionServing(self.config).predict_file(input_path)
         self.logger.info("Inference completed: predictions saved to %s", output_path)
+        self._refresh_reports("inference")
         return output_path
 
     def summary(self) -> Path:
         self.logger.info("Summary mode requested")
-        report_path = generate_summary_report(self.config)
+        report_path = generate_summary_report(self.config, archive_context="summary")
         dashboard_path = generate_html_report(self.config)
         self.logger.info(
             "Summary completed: report saved to %s; dashboard saved to %s",
@@ -184,6 +188,7 @@ class Pipeline:
         self.logger.info("Offline evaluation mode requested")
         report_path = self._get_offline_evaluator().evaluate()
         self.logger.info("Evaluation completed: report saved to %s", report_path)
+        self._refresh_reports("evaluate")
         return report_path
 
     def reset(self) -> dict[str, int]:
@@ -199,7 +204,7 @@ class Pipeline:
             "reports": self.config.paths.reports_dir.rglob("*"),
             "logs": self.config.paths.logs_dir.rglob("*"),
             "predictions": self.config.paths.predictions_dir.glob("*.csv"),
-            "models": self.config.paths.models_dir.glob("*.pkl"),
+            "models": self.config.paths.models_dir.rglob("*.pkl"),
             "offline_evaluation": [
                 self.config.paths.artifacts_dir / "offline_model_evaluation.csv"
             ],
@@ -227,11 +232,13 @@ class Pipeline:
                 / "model_diagnostics",
                 self.config.paths.reports_dir / "figures" / "archive",
                 self.config.paths.reports_dir / "archive" / "model_diagnostics",
+                self.config.paths.reports_dir / "archive" / "eda",
+                self.config.paths.reports_dir / "archive" / "summary",
                 self.config.paths.reports_dir / "archive",
-                self.config.paths.reports_dir / "summary",
                 self.config.paths.reports_dir,
                 self.config.paths.logs_dir,
                 self.config.paths.predictions_dir,
+                self.config.paths.models_dir / "archive",
                 self.config.paths.models_dir,
             ]
         )
@@ -244,7 +251,16 @@ class Pipeline:
             )
             or "nothing to remove",
         )
+        self._refresh_reports("reset")
         return removed
+
+    def _refresh_reports(self, archive_context: str) -> Path:
+        report_path = generate_summary_report(
+            self.config,
+            archive_context=archive_context,
+        )
+        generate_html_report(self.config)
+        return report_path
 
     def _remove_paths(self, paths: Iterable[Path]) -> int:
         removed = 0

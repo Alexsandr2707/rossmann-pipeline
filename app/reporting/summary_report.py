@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import os
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,14 +16,40 @@ from app.reporting.prediction_history import (
 )
 
 DEFAULT_TAIL_ROWS = 5
-SUMMARY_DIR_NAME = "summary"
 SUMMARY_FILE_NAME = "summary_latest.md"
+SUMMARY_ARCHIVE_DIR_NAME = "archive/summary"
 
 
-def generate_summary_report(config: Config) -> Path:
-    report_path = config.paths.reports_dir / SUMMARY_DIR_NAME / SUMMARY_FILE_NAME
+def generate_summary_report(config: Config, archive_context: str = "manual") -> Path:
+    report_path = config.paths.reports_dir / SUMMARY_FILE_NAME
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
+    report_path.write_text(
+        "\n".join(_summary_lines(config, report_path.parent)),
+        encoding="utf-8",
+    )
+
+    archive_path = _summary_archive_path(config, archive_context)
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.write_text(
+        "\n".join(_summary_lines(config, archive_path.parent)),
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def _summary_archive_path(config: Config, archive_context: str) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    context = re.sub(r"[^A-Za-z0-9_-]+", "_", archive_context).strip("_")
+    suffix = f"_{context}" if context else ""
+    return (
+        config.paths.reports_dir
+        / SUMMARY_ARCHIVE_DIR_NAME
+        / f"summary_{timestamp}{suffix}.md"
+    )
+
+
+def _summary_lines(config: Config, report_dir: Path) -> list[str]:
     batch_history = _read_history(config.paths.batch_metadata_path)
     data_quality_history = _read_history(config.paths.data_quality_history_path)
     model_history = _read_history(config.paths.model_metrics_history_path)
@@ -34,29 +62,27 @@ def generate_summary_report(config: Config) -> Path:
         "## Latest batch metadata",
         "",
     ]
-    lines.extend(_latest_batch_section(batch_history, report_path.parent))
+    lines.extend(_latest_batch_section(batch_history, report_dir))
     lines.extend(["", "## Latest data quality metrics", ""])
-    lines.extend(_latest_data_quality_section(data_quality_history, report_path.parent))
+    lines.extend(_latest_data_quality_section(data_quality_history, report_dir))
     lines.extend(["", "## Performance history", ""])
-    lines.extend(_performance_section(performance_history, report_path.parent))
+    lines.extend(_performance_section(performance_history, report_dir))
     lines.extend(["", "## Update prediction timeline", ""])
     lines.extend(
         _update_prediction_timeline_section(
             update_prediction_timeline_path,
-            report_path.parent,
+            report_dir,
         )
     )
     lines.extend(["", "## Model metrics trend", ""])
-    lines.extend(_model_metrics_trend_section(model_history, report_path.parent))
+    lines.extend(_model_metrics_trend_section(model_history, report_dir))
     lines.extend(["", "## Model interpretation", ""])
-    lines.extend(_model_interpretation_section(config, report_path.parent))
+    lines.extend(_model_interpretation_section(config, report_dir))
     lines.extend(["", "## Model hyperparameters", ""])
     lines.extend(_hyperparameters_section(config))
     lines.extend(["", "## Source artifacts", ""])
-    lines.extend(_artifact_links(config, report_path.parent))
-
-    report_path.write_text("\n".join(lines), encoding="utf-8")
-    return report_path
+    lines.extend(_artifact_links(config, report_dir))
+    return lines
 
 
 def _read_history(path: Path) -> list[dict[str, str]] | None:
@@ -280,8 +306,9 @@ def _artifact_links(config: Config, report_dir: Path) -> list[str]:
         else:
             lines.append(f"- {artifact_path.name}: `{relative}` (missing)")
     latest_reports = [
-        report_dir.parent / "model_diagnostics_latest.md",
-        report_dir.parent / "model_interpretation_latest.md",
+        config.paths.reports_dir / "eda_latest.md",
+        config.paths.reports_dir / "model_diagnostics_latest.md",
+        config.paths.reports_dir / "model_interpretation_latest.md",
     ]
     for report_path in latest_reports:
         relative = _relative_path(report_dir, report_path)

@@ -56,6 +56,10 @@ class ModelTrainer:
     def current_model_path(self) -> Path:
         return self.config.paths.models_dir / "current_model.pkl"
 
+    @property
+    def model_archive_dir(self) -> Path:
+        return self.config.paths.models_dir / "archive"
+
     def has_compatible_current_model(self) -> bool:
         if not self.current_model_path.exists():
             return False
@@ -517,15 +521,13 @@ class ModelTrainer:
         pipeline: SklearnPipeline,
         metrics: dict[str, Any],
     ) -> Path:
-        self.config.paths.models_dir.mkdir(parents=True, exist_ok=True)
+        self.model_archive_dir.mkdir(parents=True, exist_ok=True)
         batch_index = int(metrics["batch_index"])
         model_name = str(metrics["model_name"])
         if batch_index < 0:
-            model_path = (
-                self.config.paths.models_dir / f"model_pretrain_{model_name}.pkl"
-            )
+            model_path = self.model_archive_dir / f"model_pretrain_{model_name}.pkl"
         else:
-            model_path = self.config.paths.models_dir / (
+            model_path = self.model_archive_dir / (
                 f"model_v{batch_index:04d}_{model_name}.pkl"
             )
         joblib.dump(

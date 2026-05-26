@@ -59,7 +59,15 @@ class PipelineComponentTests(unittest.TestCase):
             with history_path.open("r", encoding="utf-8", newline="") as file:
                 row = next(csv.DictReader(file))
             self.assertEqual(json.loads(row["schema_missing_columns"]), [])
-            self.assertTrue((config.paths.reports_dir / "eda_batch_0001.md").exists())
+            self.assertTrue(
+                (
+                    config.paths.reports_dir
+                    / "archive"
+                    / "eda"
+                    / "eda_batch_0001.md"
+                ).exists()
+            )
+            self.assertTrue((config.paths.reports_dir / "eda_latest.md").exists())
 
     def test_transform_features_does_not_require_target_or_keep_customers(self) -> None:
         config = load_config("config/config.yaml")
@@ -185,6 +193,17 @@ class PipelineComponentTests(unittest.TestCase):
 
             report_path = generate_summary_report(config)
             text = report_path.read_text(encoding="utf-8")
+            self.assertEqual(
+                report_path,
+                config.paths.reports_dir / "summary_latest.md",
+            )
+            self.assertTrue(
+                any(
+                    (config.paths.reports_dir / "archive" / "summary").glob(
+                        "summary_*_manual.md"
+                    )
+                )
+            )
             self.assertIn("## Performance history", text)
             self.assertIn("operation", text)
             self.assertIn("## Model hyperparameters", text)

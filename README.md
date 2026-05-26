@@ -77,10 +77,11 @@ Docker-only процесс подтверждается следующими run
 
 - `logs/pipeline.log`
 - `models/*.pkl`
+- `models/archive/*.pkl`
 - `artifacts/collector_state.json`
 - `artifacts/*history*.csv`
 - `reports/index.html`
-- `reports/summary/summary_latest.md`
+- `reports/summary_latest.md`
 
 ## Данные
 
@@ -223,8 +224,10 @@ CLI-команды печатают основной результат в stdou
 
 Команда `python run.py -mode update 3` обрабатывает до трех stream batch-ей
 подряд. Выполнение останавливается раньше, если новых batch-ей нет. После
-завершения update mode Markdown report и HTML dashboard регенерируются
-автоматически.
+завершения каждого действия pipeline Markdown summary report и HTML dashboard
+регенерируются автоматически. Актуальная summary лежит в
+`reports/summary_latest.md`, а каждая генерация дополнительно сохраняется в
+`reports/archive/summary/`.
 
 ## Тесты
 
@@ -282,9 +285,12 @@ Runtime `update` mode эмулирует поток данных, записыв
 - `artifacts/data_quality_history.csv`
 - `artifacts/performance_history.csv`
 - `artifacts/model_metrics_history.csv`
-- `reports/eda_batch_XXXX.md`
-- `models/model_vXXXX_<model_name>.pkl`
+- `reports/archive/eda/eda_batch_XXXX.md`
+- `reports/eda_latest.md`
+- `models/archive/model_vXXXX_<model_name>.pkl`
 - `models/best_model.pkl`
+- `reports/summary_latest.md`
+- `reports/archive/summary/summary_<timestamp>_<operation>.md`
 - `reports/model_diagnostics_latest.md`
 - `reports/figures/model/prediction_timeline.svg`
 - `models/current_model.pkl` после `pretrain` или `update`
